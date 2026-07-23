@@ -142,10 +142,6 @@ exact error.
 
 ## Known limitations
 
-- **Not exercised in a live browser session by me** — verified by static
-  analysis (HTML structure, JS syntax, unit tests on the tag-rule engine
-  and date formatting), but please test a full record → save → edit →
-  tag → delete pass yourself before wider sharing.
 - Transcription auto-translation avoidance, chunk-boundary dedup, and
   silence-padding fixes are all as before — see in-app footnote for full
   detail on Whisper's known failure modes and how this pipeline works
