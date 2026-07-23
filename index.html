@@ -329,6 +329,41 @@
     max-width: 240px;
   }
 
+  /* Myth vs Truth (rule-based, on-device) */
+  .myth-item{
+    border:1px solid var(--line); border-radius:4px; padding:14px 16px; margin-bottom:14px;
+    background:rgba(255,255,255,0.02);
+  }
+  .myth-cat{
+    font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.07em;
+    text-transform:uppercase; color:var(--parchment-dim); margin-bottom:8px;
+    display:flex; gap:6px; flex-wrap:wrap; align-items:center;
+  }
+  .myth-cat-pill{
+    border:1px solid var(--line); border-radius:2px; padding:2px 7px;
+  }
+  .myth-cat-pill.ai-source{ color:var(--ember); border-color:rgba(184,99,46,0.4); }
+  .myth-item.dismissed{ opacity:0.6; }
+  .myth-quote{
+    border-left:2px solid #C96B5A; padding:2px 12px; margin-bottom:12px;
+    font-family:'Fraunces', serif; font-style:italic; font-size:15px; line-height:1.55;
+    color:var(--parchment); background:rgba(201,107,90,0.07); border-radius:0 3px 3px 0; padding-top:8px; padding-bottom:8px;
+  }
+  .truth-block{ border-left:2px solid var(--ok); padding:8px 12px; border-radius:0 3px 3px 0; background:rgba(127,163,122,0.07); }
+  .truth-label{
+    font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.07em;
+    text-transform:uppercase; color:var(--ok); margin:0 0 6px 0;
+  }
+  .truth-text{ font-size:14.5px; line-height:1.6; color:var(--parchment); white-space:pre-wrap; }
+  .truth-question{ font-size:13.5px; color:var(--parchment-dim); margin:12px 0 6px 0; font-style:italic; }
+  .myth-actions{ margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; }
+  .myth-actions button{ font-size:12.5px; padding:6px 10px; }
+  textarea.truth-input{
+    width:100%; min-height:70px; resize:vertical; margin-top:4px;
+    background:rgba(0,0,0,0.22); border:1px solid var(--line); border-radius:3px;
+    padding:10px 12px; font-family:'Fraunces', serif; font-size:14.5px; line-height:1.55; color:var(--parchment);
+  }
+
   @media (prefers-reduced-motion: reduce){
     .dot.loading, .dot.busy{ animation:none; }
   }
@@ -597,6 +632,28 @@
         </div>
       </div>
 
+      <div class="panel" id="mythTruthPanel">
+        <p class="panel-title">Myth vs Truth <span class="badge-local good">Rule-based · on-device</span></p>
+        <p class="hint" style="margin-top:0;">
+          Scans your transcript for limiting-belief language — absolutist phrasing
+          ("always"/"never"), self-blame, catastrophizing, and "should" statements — and quotes
+          each match verbatim as a <b>Myth</b>. No AI call, no network request; this runs entirely
+          as pattern-matching in your browser, the same way tag suggestions do. The rule list is
+          English-only — for other languages, or anything the rules miss, use the optional scan
+          below, which sends the transcript to your local Ollama model instead.
+        </p>
+        <div id="mythTruthList"></div>
+        <div class="actions-row">
+          <button class="ghost" id="aiMythScanBtn">Also scan with Ollama (any language)</button>
+          <span class="badge-local" id="aiMythScanBadge">Uses same Ollama connection as AI reflection</span>
+        </div>
+        <p class="hint" id="aiMythScanHint" hidden></p>
+        <div id="mythDismissedWrap" hidden style="margin-top:16px;">
+          <button class="ghost" id="mythDismissedToggle"></button>
+          <div id="mythDismissedList" hidden style="margin-top:12px;"></div>
+        </div>
+      </div>
+
       <div class="panel" id="reflectionPanel">
         <p class="panel-title">AI reflection <span class="badge-local" id="aiStatusBadge">Ollama · unknown</span></p>
         <p class="hint" style="margin-top:0;">
@@ -717,6 +774,10 @@ const aiModelCustomField = $("aiModelCustomField"), aiModelCustom = $("aiModelCu
 const reflectBtn = $("reflectBtn"), checkOllamaBtn = $("checkOllamaBtn");
 const reflectionOutput = $("reflectionOutput"), aiErrorHint = $("aiErrorHint");
 const reflectionList = $("reflectionList"), aiStatusBadge = $("aiStatusBadge");
+const mythTruthList = $("mythTruthList");
+const aiMythScanBtn = $("aiMythScanBtn"), aiMythScanHint = $("aiMythScanHint");
+const mythDismissedWrap = $("mythDismissedWrap"), mythDismissedToggle = $("mythDismissedToggle");
+const mythDismissedList = $("mythDismissedList");
 const detailTagInput = $("detailTagInput"), detailTagAddBtn = $("detailTagAddBtn");
 
 // State for saving entries and offering the raw-audio download. Raw audio is
@@ -843,6 +904,143 @@ function suggestTags(text) {
     }
   }
   return hits;
+}
+
+// ===================== Myth vs Truth (rule-based, on-device) =====================
+// Deliberately regex/keyword based, not a model call — same trust model as tag
+// suggestions above: fully deterministic, runs on this device, no network request.
+const MYTH_RULES = [
+  {
+    category: "Self-blame",
+    label: "Self-blame",
+    regex: /\b(my fault|i ruined|i ruin everything|because of me|i always mess up|i can'?t do anything right|i'?m the problem|i'?m such a failure|i failed (?:everyone|them|him|her))\b/i,
+  },
+  {
+    category: "Catastrophizing",
+    label: "Catastrophizing",
+    regex: /\b(disaster|ruined everything|the worst (?:day|thing|part)|world is ending|everything is falling apart|can'?t handle this|never going to get better|it'?s all over|beyond repair)\b/i,
+  },
+  {
+    category: "Should-statement",
+    label: "Should statement",
+    regex: /\b(i should(?:'ve| have)?(?! not)|i shouldn'?t|you should|they should|i need to have|i have to be)\b/i,
+  },
+  {
+    category: "Absolutist",
+    label: "Always / never",
+    regex: /\b(always|never|everyone|no ?one|nobody|everything|nothing|every time|all the time|every single time)\b/i,
+  },
+];
+
+const MYTH_FOLLOWUP_QUESTIONS = {
+  "Absolutist": "Was this really true every single time, or mainly just this time?",
+  "Self-blame": "What part of this was actually outside your control?",
+  "Catastrophizing": "Looking back, how bad did this actually turn out to be?",
+  "Should-statement": "What's another reasonable way this could have gone?",
+};
+
+function splitSentences(text) {
+  return (text || "")
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+// Small deterministic string hash — used as a stable id for a detected myth so a
+// user's saved Truth (or dismissal) survives re-detection (e.g. reopening the
+// entry) as long as the flagged sentence itself hasn't changed. Keyed on the
+// sentence alone (not category) since one sentence can now match several rules.
+function hashId(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return "m" + Math.abs(h).toString(36);
+}
+
+// A handful of words that, immediately before a matched trigger phrase, tend to
+// flip its meaning rather than express it — "not always," "wasn't my fault,"
+// "isn't everyone" read as realistic/self-exonerating, not as the limiting
+// belief itself. Checked only in the few words right before the match.
+const NEGATION_WORDS = ["not", "isn't", "wasn't", "weren't", "aren't", "doesn't", "didn't", "don't", "no"];
+function isNegatedBefore(sentence, matchIndex) {
+  const before = sentence.slice(0, matchIndex).trim();
+  if (!before) return false;
+  const lastWords = before.split(/\s+/).slice(-3).join(" ").toLowerCase();
+  return NEGATION_WORDS.some((neg) => new RegExp(`\\b${neg}\\b`).test(lastWords));
+}
+
+// Rule-based pass: every sentence is checked against every rule (not just the
+// first match), so a sentence spanning two patterns — "I always mess
+// everything up" reads as both self-blame and absolutist — surfaces both
+// category badges instead of silently picking one.
+function detectMythsRuleBased(transcript) {
+  const sentences = splitSentences(transcript);
+  const found = [];
+  for (const s of sentences) {
+    const matchedRules = [];
+    for (const rule of MYTH_RULES) {
+      const m = rule.regex.exec(s);
+      if (m && !isNegatedBefore(s, m.index)) matchedRules.push(rule);
+    }
+    if (matchedRules.length) {
+      found.push({
+        id: hashId(s),
+        sentence: s,
+        categories: matchedRules.map((r) => ({ category: r.category, label: r.label })),
+        primaryCategory: matchedRules[0].category,
+        source: "rule",
+      });
+    }
+  }
+  return found;
+}
+
+function shortDate(ms) {
+  return new Date(ms).toLocaleDateString(undefined, { dateStyle: "medium" });
+}
+
+// Combines the always-on rule-based scan with any myths previously found by the
+// optional Ollama fallback scan (persisted on the entry, since that scan is a
+// one-off network call, not something re-run on every render like the regex
+// pass). Sentences flagged by both keep their rule-based version. Splits the
+// result into active vs. user-dismissed based on any saved mythTruths record.
+function partitionMyths(e) {
+  const ruleItems = detectMythsRuleBased(e.transcript);
+  const aiItems = e.aiMyths || [];
+  const byId = new Map();
+  for (const it of ruleItems) byId.set(it.id, it);
+  for (const it of aiItems) if (!byId.has(it.id)) byId.set(it.id, it);
+  const saved = e.mythTruths || {};
+  const active = [];
+  const dismissed = [];
+  for (const item of byId.values()) {
+    const rec = saved[item.id];
+    if (rec && rec.mode === "dismissed") dismissed.push(item);
+    else active.push(item);
+  }
+  return { active, dismissed };
+}
+function mergeMythLists(e) {
+  return partitionMyths(e).active;
+}
+
+// Templated Truth: slot-filled from the entry's own date/where/tags — no model call.
+// Uses the sentence's primary (highest-priority) matched category.
+function templatedTruth(item, e) {
+  const when = shortDate(e.when || e.createdAt);
+  const where = e.where ? ` in ${e.where}` : "";
+  const tag = e.tags && e.tags.length ? ` — this was one ${e.tags[0]} moment, not the whole story` : "";
+  switch (item.primaryCategory) {
+    case "Absolutist":
+      return `This was one moment on ${when}${where}, not every day working out the same way${tag}.`;
+    case "Self-blame":
+      return `Plenty here was outside your control on ${when}${where}; this wasn't only about you${tag}.`;
+    case "Catastrophizing":
+      return `It felt like the worst in that moment on ${when}${where} — feelings like this tend to shift with time${tag}.`;
+    case "Should-statement":
+      return `There was more than one reasonable path here on ${when}${where}; this was one option, not the only right one${tag}.`;
+    default:
+      return `Worth sitting with a gentler read of this moment from ${when}${where}.`;
+  }
 }
 
 let transcriber = null;
@@ -1497,6 +1695,8 @@ function entryMetaLine(e) {
   if (e.reflections && e.reflections.length) {
     parts.push(`${e.reflections.length} reflection${e.reflections.length === 1 ? "" : "s"}`);
   }
+  const mythCount = mergeMythLists(e).length;
+  if (mythCount) parts.push(`${mythCount} myth${mythCount === 1 ? "" : "s"} flagged`);
   const tags = e.tags || [];
   if (tags.length) parts.push(tags.join(", "));
   parts.push(e.private === false ? "shareable" : "private");
@@ -1521,6 +1721,8 @@ saveEntryBtn.addEventListener("click", async () => {
     originalTranscript: transcript,
     notes: [],
     reflections: [],
+    mythTruths: {},
+    aiMyths: [],
     where: captureWhere.value.trim(),
     when: whenMs,
     lifeEra: resolveEra(captureEra, captureEraCustom),
@@ -1647,6 +1849,10 @@ function openDetail(id) {
   renderNotes(e);
   renderTags(e);
   renderReflections(e);
+  renderMythTruths(e);
+  aiMythScanHint.hidden = true;
+  aiMythScanBtn.disabled = false;
+  aiMythScanBtn.textContent = "Also scan with Ollama (any language)";
   reflectionOutput.hidden = true;
   reflectionOutput.textContent = "";
   aiErrorHint.hidden = true;
@@ -1717,6 +1923,7 @@ saveChangesBtn.addEventListener("click", async () => {
   if (fresh) {
     detailTitle.value = fresh.title;
     updateDetailChrome(fresh);
+    renderMythTruths(fresh);
   }
   saveChangesBtn.disabled = true;
   saveChangesBtn.textContent = "Saved ✓";
@@ -2080,6 +2287,284 @@ function renderReflections(e) {
     reflectionList.appendChild(item);
   }
 }
+
+function buildMythItemEl(item, e, isDismissed) {
+  const saved = e.mythTruths || {};
+  const rec = saved[item.id];
+  const wrap = document.createElement("div");
+  wrap.className = "myth-item" + (isDismissed ? " dismissed" : "");
+
+  const cat = document.createElement("div");
+  cat.className = "myth-cat";
+  for (const c of item.categories) {
+    const pill = document.createElement("span");
+    pill.className = "myth-cat-pill";
+    pill.textContent = c.label;
+    cat.appendChild(pill);
+  }
+  if (item.source === "ai") {
+    const aiPill = document.createElement("span");
+    aiPill.className = "myth-cat-pill ai-source";
+    aiPill.textContent = "AI-detected · Ollama";
+    cat.appendChild(aiPill);
+  }
+  wrap.appendChild(cat);
+
+  const quote = document.createElement("div");
+  quote.className = "myth-quote";
+  quote.textContent = `"${item.sentence}"`;
+  wrap.appendChild(quote);
+
+  if (isDismissed) {
+    const restoreBtn = document.createElement("button");
+    restoreBtn.className = "ghost";
+    restoreBtn.textContent = "Restore";
+    restoreBtn.addEventListener("click", async () => {
+      const cur = getEntry(openEntryId);
+      if (!cur || !cur.mythTruths) return;
+      delete cur.mythTruths[item.id];
+      cur.updatedAt = Date.now();
+      try { await dbPut(cur); } catch (err) { console.error("Restoring myth failed:", err); return; }
+      await refreshEntries();
+      const fresh = getEntry(openEntryId);
+      if (fresh) { renderMythTruths(fresh); updateDetailChrome(fresh); }
+    });
+    wrap.appendChild(restoreBtn);
+    return wrap;
+  }
+
+  const truthBlock = document.createElement("div");
+  truthBlock.className = "truth-block";
+  const truthLabel = document.createElement("p");
+  truthLabel.className = "truth-label";
+  truthLabel.textContent = "Truth";
+  const truthText = document.createElement("div");
+  truthText.className = "truth-text";
+  truthText.textContent = rec && rec.mode === "user" ? rec.truth : templatedTruth(item, e);
+  truthBlock.append(truthLabel, truthText);
+  wrap.appendChild(truthBlock);
+
+  const actions = document.createElement("div");
+  actions.className = "myth-actions";
+
+  const answerBtn = document.createElement("button");
+  answerBtn.className = "ghost";
+  answerBtn.textContent = rec && rec.mode === "user" ? "Edit my answer" : "Answer this myself instead";
+  actions.appendChild(answerBtn);
+
+  if (rec && rec.mode === "user") {
+    const revertBtn = document.createElement("button");
+    revertBtn.className = "ghost";
+    revertBtn.textContent = "Revert to suggested truth";
+    revertBtn.addEventListener("click", async () => {
+      const cur = getEntry(openEntryId);
+      if (!cur || !cur.mythTruths) return;
+      delete cur.mythTruths[item.id];
+      cur.updatedAt = Date.now();
+      try { await dbPut(cur); } catch (err) { console.error("Reverting Truth failed:", err); return; }
+      await refreshEntries();
+      const fresh = getEntry(openEntryId);
+      if (fresh) renderMythTruths(fresh);
+    });
+    actions.appendChild(revertBtn);
+  }
+
+  const dismissBtn = document.createElement("button");
+  dismissBtn.className = "ghost";
+  dismissBtn.textContent = "Not a myth — dismiss";
+  dismissBtn.addEventListener("click", async () => {
+    const cur = getEntry(openEntryId);
+    if (!cur) return;
+    cur.mythTruths = cur.mythTruths || {};
+    cur.mythTruths[item.id] = {
+      category: item.primaryCategory,
+      sentence: item.sentence,
+      mode: "dismissed",
+      updatedAt: Date.now(),
+    };
+    cur.updatedAt = Date.now();
+    try { await dbPut(cur); } catch (err) { console.error("Dismissing myth failed:", err); return; }
+    await refreshEntries();
+    const fresh = getEntry(openEntryId);
+    if (fresh) { renderMythTruths(fresh); updateDetailChrome(fresh); }
+  });
+  actions.appendChild(dismissBtn);
+  wrap.appendChild(actions);
+
+  // Inline elicitation form, built lazily and toggled open/closed
+  const form = document.createElement("div");
+  form.hidden = true;
+  const q = document.createElement("p");
+  q.className = "truth-question";
+  q.textContent = MYTH_FOLLOWUP_QUESTIONS[item.primaryCategory] || "What feels more true, looking back?";
+  const input = document.createElement("textarea");
+  input.className = "truth-input";
+  input.placeholder = "Write your own answer…";
+  input.value = rec && rec.mode === "user" ? rec.truth : "";
+  const formActions = document.createElement("div");
+  formActions.className = "myth-actions";
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "primary";
+  saveBtn.textContent = "Save my truth";
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "ghost";
+  cancelBtn.textContent = "Cancel";
+  formActions.append(saveBtn, cancelBtn);
+  form.append(q, input, formActions);
+  wrap.appendChild(form);
+
+  answerBtn.addEventListener("click", () => {
+    form.hidden = !form.hidden;
+    if (!form.hidden) input.focus();
+  });
+  cancelBtn.addEventListener("click", () => { form.hidden = true; });
+  saveBtn.addEventListener("click", async () => {
+    const text = input.value.trim();
+    if (!text) return;
+    const cur = getEntry(openEntryId);
+    if (!cur) return;
+    cur.mythTruths = cur.mythTruths || {};
+    cur.mythTruths[item.id] = {
+      category: item.primaryCategory,
+      sentence: item.sentence,
+      mode: "user",
+      truth: text,
+      updatedAt: Date.now(),
+    };
+    cur.updatedAt = Date.now();
+    try { await dbPut(cur); } catch (err) { console.error("Saving Truth failed:", err); return; }
+    await refreshEntries();
+    const fresh = getEntry(openEntryId);
+    if (fresh) renderMythTruths(fresh);
+  });
+
+  return wrap;
+}
+
+function renderMythTruths(e) {
+  mythTruthList.textContent = "";
+  const { active, dismissed } = partitionMyths(e);
+
+  if (!active.length) {
+    const d = document.createElement("div");
+    d.className = "empty-msg";
+    d.textContent = "No limiting-belief language detected in this entry's current transcript.";
+    mythTruthList.appendChild(d);
+  } else {
+    for (const item of active) mythTruthList.appendChild(buildMythItemEl(item, e, false));
+  }
+
+  if (dismissed.length) {
+    mythDismissedWrap.hidden = false;
+    mythDismissedToggle.textContent = `${dismissed.length} dismissed — show`;
+    mythDismissedList.hidden = true;
+    mythDismissedList.textContent = "";
+    for (const item of dismissed) mythDismissedList.appendChild(buildMythItemEl(item, e, true));
+  } else {
+    mythDismissedWrap.hidden = true;
+  }
+}
+mythDismissedToggle.addEventListener("click", () => {
+  const willShow = mythDismissedList.hidden;
+  mythDismissedList.hidden = !willShow;
+  const e = getEntry(openEntryId);
+  const count = e ? partitionMyths(e).dismissed.length : 0;
+  mythDismissedToggle.textContent = `${count} dismissed — ${willShow ? "hide" : "show"}`;
+});
+
+// Optional fallback: send the transcript to the same local Ollama connection
+// used for reflections and ask it to find limiting-belief sentences in any
+// language. Strictly instructed to quote verbatim; any "quote" that doesn't
+// literally appear in the transcript is dropped rather than trusted, since
+// the whole point of a Myth is that it's the user's own words, not a
+// paraphrase.
+const MYTH_SCAN_SYSTEM_PROMPT =
+  "You find sentences expressing limiting or distorted beliefs in a personal journal " +
+  "entry, which may be written in any language. Categories: Self-blame, Catastrophizing, " +
+  "Should-statement, Absolutist. Respond with ONLY a JSON array, no other text, no markdown " +
+  "fences. Each element: {\"sentence\": <the exact sentence copied verbatim from the entry, " +
+  "unmodified>, \"category\": <one of the four category names above>}. Only include a sentence " +
+  "if it is copied exactly, character-for-character, from the entry text. If none are found, " +
+  "respond with []. Do not invent, translate, or paraphrase sentences.";
+
+aiMythScanBtn.addEventListener("click", async () => {
+  const e = getEntry(openEntryId);
+  if (!e) return;
+  const transcript = (detailTranscript.value || "").trim();
+  if (!transcript) return;
+
+  persistAiSettingsFromUi();
+  const endpoint = aiSettings.endpoint.replace(/\/$/, "");
+  const model = currentModelName();
+
+  aiMythScanBtn.disabled = true;
+  aiMythScanBtn.textContent = "Scanning…";
+  aiMythScanHint.hidden = true;
+
+  try {
+    const res = await fetch(`${endpoint}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        stream: false,
+        format: "json",
+        messages: [
+          { role: "system", content: MYTH_SCAN_SYSTEM_PROMPT },
+          { role: "user", content: transcript },
+        ],
+      }),
+    });
+    if (!res.ok) throw new Error(`Ollama returned HTTP ${res.status}`);
+    const data = await res.json();
+    const raw = (data.message && data.message.content) || "[]";
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch { throw new Error("The model's response wasn't valid JSON."); }
+    if (!Array.isArray(parsed)) throw new Error("The model's response wasn't a JSON array.");
+
+    const validCats = new Set(MYTH_RULES.map((r) => r.category));
+    const cur = getEntry(openEntryId);
+    if (!cur) return;
+    cur.aiMyths = cur.aiMyths || [];
+    const existingIds = new Set(cur.aiMyths.map((m) => m.id));
+    let added = 0;
+    for (const row of parsed) {
+      if (!row || typeof row.sentence !== "string" || !transcript.includes(row.sentence.trim())) continue; // verbatim guard
+      const category = validCats.has(row.category) ? row.category : "Absolutist";
+      const sentence = row.sentence.trim();
+      const id = hashId(sentence);
+      if (existingIds.has(id)) continue;
+      const ruleDef = MYTH_RULES.find((r) => r.category === category);
+      cur.aiMyths.push({
+        id,
+        sentence,
+        categories: [{ category, label: ruleDef ? ruleDef.label : category }],
+        primaryCategory: category,
+        source: "ai",
+      });
+      existingIds.add(id);
+      added++;
+    }
+    cur.updatedAt = Date.now();
+    await dbPut(cur);
+    await refreshEntries();
+    const fresh = getEntry(openEntryId);
+    if (fresh) { renderMythTruths(fresh); updateDetailChrome(fresh); }
+    aiMythScanHint.hidden = false;
+    aiMythScanHint.textContent = added
+      ? `Found ${added} additional flag${added === 1 ? "" : "s"} via Ollama.`
+      : "Ollama didn't find anything beyond what the rule-based scan already caught.";
+  } catch (err) {
+    console.error("Ollama myth scan failed:", err);
+    aiMythScanHint.hidden = false;
+    aiMythScanHint.textContent =
+      "Couldn't complete the Ollama scan (" + err.message + "). Make sure `ollama serve` is " +
+      "running with this page's origin allowed — see the footnote below the record panel.";
+  } finally {
+    aiMythScanBtn.disabled = false;
+    aiMythScanBtn.textContent = "Also scan with Ollama (any language)";
+  }
+});
 
 // ===================== init =====================
 refreshEntries();
