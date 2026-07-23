@@ -1,0 +1,2088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LOOB — Local Entries Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink: #17140F;
+    --parchment: #F3ECDD;
+    --parchment-dim: #C9BFA8;
+    --ember: #B8632E;
+    --ember-soft: rgba(184,99,46,0.18);
+    --teal: #33505A;
+    --teal-soft: rgba(51,80,90,0.25);
+    --line: rgba(243,236,221,0.12);
+    --ok: #7FA37A;
+    --warn: #D6A24C;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0;
+    background: radial-gradient(120% 140% at 15% -10%, #241f18 0%, var(--ink) 55%);
+    color: var(--parchment);
+    font-family: 'Inter', sans-serif;
+    min-height:100vh;
+  }
+  .wrap{
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 56px 24px 80px;
+  }
+  .eyebrow{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color: var(--ember);
+    margin-bottom:14px;
+  }
+  h1{
+    font-family:'Fraunces', serif;
+    font-weight:500;
+    font-size: clamp(32px, 5vw, 46px);
+    line-height:1.08;
+    margin: 0 0 14px;
+    color: var(--parchment);
+  }
+  .lede{
+    font-size:15.5px;
+    line-height:1.6;
+    color: var(--parchment-dim);
+    max-width: 58ch;
+    margin: 0 0 40px;
+  }
+  .lede b{ color: var(--parchment); font-weight:500; }
+
+  .panel{
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 24px;
+    margin-bottom: 20px;
+    background: rgba(243,236,221,0.02);
+  }
+  .panel-title{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color: var(--parchment-dim);
+    margin: 0 0 16px;
+  }
+
+  /* status / model load */
+  .status-row{ display:flex; align-items:center; gap:12px; }
+  .dot{ width:8px; height:8px; border-radius:50%; background: var(--parchment-dim); flex-shrink:0; }
+  .dot.loading{ background: var(--warn); animation: pulse 1.4s ease-in-out infinite; }
+  .dot.ready{ background: var(--ok); }
+  .dot.busy{ background: var(--ember); animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  .status-text{ font-size:13.5px; color: var(--parchment-dim); }
+  .progress-track{
+    margin-top:12px; height:3px; width:100%;
+    background: rgba(243,236,221,0.08); border-radius: 2px; overflow:hidden;
+  }
+  .progress-fill{
+    height:100%; width:0%; background: var(--ember);
+    transition: width 0.25s ease;
+  }
+
+  /* controls */
+  .controls-grid{ display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  label{
+    font-family:'JetBrains Mono', monospace;
+    font-size:10.5px; letter-spacing:0.08em; text-transform:uppercase;
+    color: var(--parchment-dim);
+  }
+  select, input[type=file]{
+    background: rgba(0,0,0,0.25);
+    border:1px solid var(--line);
+    color: var(--parchment);
+    padding: 9px 10px;
+    border-radius:3px;
+    font-family:'Inter',sans-serif;
+    font-size:13.5px;
+    max-width: 240px;
+  }
+  select:focus, input:focus, button:focus{
+    outline: 2px solid var(--ember); outline-offset:2px;
+  }
+  button{
+    font-family:'Inter', sans-serif;
+    font-weight:500;
+    font-size:13.5px;
+    padding: 10px 18px;
+    border-radius:3px;
+    border: 1px solid transparent;
+    cursor:pointer;
+    transition: all 0.15s ease;
+  }
+  button.primary{
+    background: var(--ember); color: #1B1310; border-color: var(--ember);
+  }
+  button.primary:hover{ background:#c8712f; }
+  button.ghost{
+    background: transparent; color: var(--parchment); border-color: var(--line);
+  }
+  button.ghost:hover{ border-color: var(--parchment-dim); }
+  button.record{
+    background: var(--teal-soft); color: var(--parchment); border-color: var(--teal);
+  }
+  button.record.active{
+    background: rgba(184,99,46,0.22); border-color: var(--ember); color: var(--ember);
+  }
+  button:disabled{ opacity:0.4; cursor:not-allowed; }
+
+  .rec-timer{
+    font-family:'JetBrains Mono', monospace; font-size:13px; color: var(--parchment-dim);
+    min-width:52px;
+  }
+
+  /* transcript */
+  .transcript-box{
+    min-height: 160px;
+    background: rgba(0,0,0,0.22);
+    border:1px solid var(--line);
+    border-radius:3px;
+    padding:18px;
+    font-family:'Fraunces', serif;
+    font-size:16.5px;
+    line-height:1.65;
+    color: var(--parchment);
+    white-space: pre-wrap;
+  }
+  .transcript-box:empty::before{
+    content: "Transcript will gather here as audio is processed.";
+    color: var(--parchment-dim);
+    font-family:'Inter', sans-serif;
+    font-size:14px;
+  }
+  .chunk-progress{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11.5px;
+    color: var(--parchment-dim);
+    margin-top:10px;
+  }
+
+  .footnote{
+    font-size:12.5px;
+    line-height:1.6;
+    color: var(--parchment-dim);
+    border-top: 1px solid var(--line);
+    padding-top:18px;
+    margin-top:8px;
+  }
+  .footnote strong{ color: var(--parchment); }
+
+  a{ color: var(--ember); }
+
+  .actions-row{ display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+
+  /* view tabs */
+  .tabs{ display:flex; gap:6px; margin-bottom:30px; border-bottom:1px solid var(--line); }
+  .tab{
+    background:transparent; border:none; border-bottom:2px solid transparent;
+    color:var(--parchment-dim); padding:10px 14px; border-radius:0;
+    font-family:'JetBrains Mono', monospace; font-size:12px;
+    letter-spacing:0.1em; text-transform:uppercase;
+  }
+  .tab:hover{ color:var(--parchment); }
+  .tab.active{ color:var(--ember); border-bottom-color:var(--ember); }
+
+  /* library list */
+  .search-input{
+    width:100%;
+    background:rgba(0,0,0,0.25); border:1px solid var(--line);
+    color:var(--parchment); padding:10px 12px; border-radius:3px;
+    font-family:'Inter', sans-serif; font-size:13.5px;
+    margin-bottom:16px;
+  }
+  .entry-card{
+    border:1px solid var(--line); border-radius:3px;
+    padding:16px 18px; margin-bottom:12px; cursor:pointer;
+    background:rgba(0,0,0,0.15);
+    transition:border-color 0.15s ease;
+  }
+  .entry-card:hover{ border-color:var(--ember); }
+  .entry-card h3{
+    font-family:'Fraunces', serif; font-weight:500; font-size:17px;
+    margin:0 0 6px; color:var(--parchment);
+  }
+  .entry-card .preview{
+    font-size:13.5px; line-height:1.55; color:var(--parchment-dim);
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .meta-line{
+    font-family:'JetBrains Mono', monospace; font-size:11px;
+    color:var(--parchment-dim); letter-spacing:0.04em; line-height:1.6;
+    margin-bottom:8px;
+  }
+  .empty-msg{ font-size:14px; color:var(--parchment-dim); padding:6px 0 4px; line-height:1.55; }
+
+  /* entry detail */
+  .title-input{
+    width:100%; background:transparent; border:none;
+    border-bottom:1px solid var(--line);
+    color:var(--parchment); font-family:'Fraunces', serif;
+    font-size:24px; font-weight:500;
+    padding:6px 2px 10px; margin-bottom:10px;
+  }
+  .title-input:focus{ outline:none; border-bottom-color:var(--ember); }
+  textarea.transcript-edit{
+    width:100%; min-height:220px; resize:vertical;
+    background:rgba(0,0,0,0.22); border:1px solid var(--line); border-radius:3px;
+    padding:18px; font-family:'Fraunces', serif; font-size:16.5px; line-height:1.65;
+    color:var(--parchment);
+  }
+  textarea.note-input{
+    width:100%; min-height:64px; resize:vertical; margin-top:4px;
+    background:rgba(0,0,0,0.25); border:1px solid var(--line); border-radius:3px;
+    padding:10px 12px; font-family:'Inter', sans-serif; font-size:13.5px; line-height:1.55;
+    color:var(--parchment);
+  }
+  .note-item{
+    border-left:2px solid var(--teal); padding:9px 12px; margin-bottom:10px;
+    background:rgba(51,80,90,0.10); border-radius:0 3px 3px 0;
+  }
+  .note-item .note-text{ font-size:13.5px; line-height:1.55; white-space:pre-wrap; }
+  .note-item .note-foot{ display:flex; justify-content:space-between; align-items:center; margin-top:6px; }
+  .note-item .note-foot .meta-line{ margin-bottom:0; }
+  .note-del{ background:none; border:none; color:var(--parchment-dim); font-size:11.5px; padding:2px 4px; }
+  .note-del:hover{ color:var(--ember); }
+  button.danger{ background:transparent; color:#C96B5A; border-color:rgba(201,107,90,0.5); }
+  button.danger:hover{ border-color:#C96B5A; }
+  .badge-edited{
+    font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.08em;
+    text-transform:uppercase; color:var(--warn);
+    border:1px solid rgba(214,162,76,0.4); border-radius:2px;
+    padding:2px 6px; margin-left:8px; vertical-align:middle;
+  }
+  .hint{ font-size:11.5px; line-height:1.55; color:var(--parchment-dim); margin:10px 0 0; }
+
+  /* categorization: tags, life era, where/when, privacy */
+  .tag-row{ display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+  .tag-chip{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.04em;
+    padding:5px 10px; border-radius:12px;
+    background:rgba(184,99,46,0.14); border:1px solid rgba(184,99,46,0.4);
+    color:var(--parchment);
+  }
+  .tag-chip.suggested{
+    background:transparent; border-style:dashed; color:var(--parchment-dim); cursor:pointer;
+  }
+  .tag-chip.suggested:hover{ border-color:var(--ember); color:var(--ember); }
+  .tag-chip .tag-x{
+    cursor:pointer; color:var(--parchment-dim); font-family:'Inter',sans-serif; line-height:1;
+  }
+  .tag-chip .tag-x:hover{ color:var(--ember); }
+  .tag-input-row{ display:flex; gap:8px; margin-top:4px; }
+  .tag-input-row input[type=text]{
+    flex:1; background:rgba(0,0,0,0.25); border:1px solid var(--line); color:var(--parchment);
+    padding:8px 10px; border-radius:3px; font-family:'Inter',sans-serif; font-size:13px;
+  }
+  .meta-fields-grid{ display:flex; flex-wrap:wrap; gap:14px; margin:14px 0; }
+  .meta-fields-grid .field{ min-width:180px; flex:1; }
+  .meta-fields-grid input[type=text], .meta-fields-grid input[type=datetime-local], select.era-select{
+    background: rgba(0,0,0,0.25); border:1px solid var(--line); color: var(--parchment);
+    padding: 9px 10px; border-radius:3px; font-family:'Inter',sans-serif; font-size:13.5px; width:100%;
+  }
+  .privacy-toggle{
+    display:flex; align-items:center; gap:10px;
+    font-family:'JetBrains Mono', monospace; font-size:11.5px; letter-spacing:0.05em;
+    color:var(--parchment-dim);
+  }
+  .privacy-toggle input{ width:16px; height:16px; accent-color: var(--ember); }
+  .privacy-toggle.is-private{ color: var(--ok); }
+  textarea.write-entry{
+    width:100%; min-height:120px; resize:vertical;
+    background:rgba(0,0,0,0.22); border:1px solid var(--line); border-radius:3px;
+    padding:16px; font-family:'Fraunces', serif; font-size:16px; line-height:1.6; color:var(--parchment);
+  }
+
+  /* AI reflection (local Ollama call) */
+  .badge-local{
+    font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.06em;
+    text-transform:uppercase; border:1px solid var(--line); border-radius:2px;
+    padding:2px 6px; margin-left:10px; color:var(--parchment-dim); vertical-align:middle;
+  }
+  .badge-local.good{ color:var(--ok); border-color:rgba(127,163,122,0.4); }
+  .badge-local.bad{ color:#C96B5A; border-color:rgba(201,107,90,0.4); }
+  .reflection-output{
+    min-height:70px; margin-top:14px;
+    background:rgba(0,0,0,0.22); border:1px solid var(--line); border-radius:3px;
+    padding:16px; font-family:'Fraunces', serif; font-size:15.5px; line-height:1.65;
+    color:var(--parchment); white-space:pre-wrap;
+  }
+  .reflection-item{
+    border-left:2px solid var(--ember); padding:9px 12px; margin-bottom:10px;
+    background:rgba(184,99,46,0.08); border-radius:0 3px 3px 0;
+  }
+  .ai-settings-grid input[type=text]{
+    background: rgba(0,0,0,0.25); border:1px solid var(--line); color: var(--parchment);
+    padding: 9px 10px; border-radius:3px; font-family:'Inter',sans-serif; font-size:13.5px;
+    max-width: 240px;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .dot.loading, .dot.busy{ animation:none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">LOOB · engineering prototype</div>
+  <h1>A transcript with no clock on it.</h1>
+  <p class="lede">
+    This runs Whisper small entirely in your browser tab. <b>No server, no upload</b> —
+    audio is decoded and transcribed on this device, in any of the ~99 languages
+    Whisper small was trained on, for recordings of any length. Transcripts can now be
+    saved as <b>entries</b> — edited, annotated with notes, and browsed in the Library —
+    stored in this browser, on this device, and nowhere else.
+  </p>
+
+  <div class="tabs">
+    <button class="tab active" id="tabCapture">Capture</button>
+    <button class="tab" id="tabLibrary">Library · <span id="libCount">0</span></button>
+  </div>
+
+  <div id="viewCapture">
+
+  <div class="panel">
+    <p class="panel-title">Model status</p>
+    <div class="status-row">
+      <div class="dot" id="statusDot"></div>
+      <div class="status-text" id="statusText">Not loaded yet — press "Load model" to begin.</div>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="actions-row">
+      <button class="primary" id="loadModelBtn">Load model</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <p class="panel-title">Source audio</p>
+    <div class="controls-grid">
+      <div class="field">
+        <label for="langSelect">Primary language</label>
+        <select id="langSelect"></select>
+      </div>
+      <div class="field">
+        <label for="langSelect2">Also expect (for code-switching)</label>
+        <select id="langSelect2"></select>
+      </div>
+      <div class="field">
+        <label for="fileInput">Upload a file</label>
+        <input type="file" id="fileInput" accept="audio/*,video/webm">
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="record" id="recordBtn" disabled>● Record</button>
+          <span class="rec-timer" id="recTimer">00:00</span>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:11.5px; color: var(--parchment-dim); margin: 10px 0 0;">
+      Blind "detect any of 99 languages" turned out to be unreliable in this browser environment —
+      every unconstrained pass Whisper offers can silently mistranslate instead of transcribing, with
+      no dependable way from here to tell when it has. What does work reliably: naming the language
+      explicitly. If your recording switches between two languages, set both here — each ~15s window
+      is tried against both explicitly and whichever result actually matches its target language's
+      words or script is kept, roughly doubling processing time in exchange for actually being
+      trustworthy.
+    </p>
+    <div class="chunk-progress" id="chunkProgress"></div>
+  </div>
+
+
+  <div class="panel">
+    <p class="panel-title">Or write directly</p>
+    <textarea class="write-entry" id="writeEntryInput"
+              placeholder="Type an entry instead of recording or uploading…"></textarea>
+    <div class="actions-row">
+      <button class="ghost" id="useWrittenTextBtn">Use this text</button>
+    </div>
+    <p class="hint">This loads your text into the transcript below as-is — no transcription step runs.</p>
+  </div>
+
+  <div class="panel">
+    <p class="panel-title">Transcript</p>
+    <div class="transcript-box" id="transcriptBox"></div>
+    <div class="chunk-progress" id="wordCount"></div>
+
+    <div class="meta-fields-grid">
+      <div class="field">
+        <label for="captureWhere">Where</label>
+        <input type="text" id="captureWhere" placeholder="e.g. Grandma's kitchen">
+      </div>
+      <div class="field">
+        <label for="captureWhen">When (if not now)</label>
+        <input type="datetime-local" id="captureWhen">
+      </div>
+      <div class="field">
+        <label for="captureEra">Life era</label>
+        <select class="era-select" id="captureEra"></select>
+        <input type="text" id="captureEraCustom" placeholder="Name this era…" hidden style="margin-top:6px;">
+      </div>
+    </div>
+    <label class="privacy-toggle is-private" id="capturePrivacyLabel">
+      <input type="checkbox" id="capturePrivate" checked>
+      <span id="capturePrivacyText">Private — kept on this device only, not marked for any future sharing</span>
+    </label>
+
+    <div class="actions-row">
+      <button class="primary" id="saveEntryBtn" disabled>Save as entry</button>
+      <button class="ghost" id="downloadAudioBtn" hidden>Download recording (.wav)</button>
+      <button class="ghost" id="copyBtn">Copy transcript</button>
+      <button class="ghost" id="clearBtn">Clear</button>
+    </div>
+    <p class="hint" id="captureHint" hidden>
+      Saved entries keep the transcript only — audio is never stored. If you want to keep
+      this recording, download it now; it's discarded the next time you record.
+    </p>
+  </div>
+
+  <details class="panel" open>
+    <summary class="panel-title" style="cursor:pointer;">Debug log (per-chunk language/task detail) — open by default, copy this if translation happens again</summary>
+    <pre id="debugLog" style="font-family:'JetBrains Mono', monospace; font-size:11.5px; color: var(--parchment-dim); white-space:pre-wrap; margin-top:12px;"></pre>
+    <div class="actions-row">
+      <button class="ghost" id="copyDebugBtn">Copy debug log</button>
+    </div>
+  </details>
+
+  <p class="footnote">
+    <strong>How this stays local-first:</strong> the model weights (~250&nbsp;MB, one-time) are
+    fetched from Hugging Face's CDN the first time you load the model, then cached by the browser
+    for offline reuse. From that point on — and for every recording you make — nothing leaves this
+    tab: audio is read, chunked, and transcribed in-memory on your device.<br><br>
+    <strong>Known limits of this prototype:</strong> recordings over 15s are split into 15s windows
+    with 3s overlap, so the model's 30-second context limit never truncates a long recording. Getting
+    reliable language handling took several rounds of direct testing before landing here, worth being
+    upfront about: this pipeline never exposes a detected-language field through its API at all, and
+    forcing <code>task: "transcribe"</code> without also pinning down an explicit language turned out
+    to be unreliable on its own — it would sometimes translate to English silently, with no way from
+    the outside to tell when it had, confirmed by a "sample" pass coming back as a fully fluent
+    English translation of what was actually French. The only combination confirmed reliable, twice
+    over, is language and task forced together explicitly. So this prototype no longer attempts blind
+    auto-detection across all 99 languages — that's a real capability gap worth knowing about, not
+    a hidden one. Instead, "Also expect" lets you name a second language a recording is expected to
+    switch into; when set, every ~15s window is transcribed once per candidate language, explicitly,
+    and whichever result actually matches its own target language — by Unicode script for languages
+    like Tamil and Hindi, by stopword frequency for Latin-script languages like French, English, and
+    Tagalog — is kept. This means hybrid mode always costs twice the compute of single-language mode,
+    since both candidates genuinely run every window regardless of which one turns out to be right.
+    It also can't recover a language from Whisper's own hallucinated, phonetically-transliterated
+    output (seen once in testing, where a Tamil section came out as repeated nonsense Latin-letter
+    syllables) — no scoring scheme fixes text that was never real to begin with. A generation length
+    cap is applied per chunk for that same hallucination case, since the repetition penalty alone
+    didn't fully stop it from looping a single word hundreds of times — the cap won't prevent that
+    failure mode outright, but it bounds how much damage one bad chunk can do to the rest of the
+    transcript. Chunk boundaries are merged in two layers: segment timestamps trim most of the
+    overlap first, then a content-based check compares the tail of what's already been kept against
+    the head of each new chunk and drops any real word-for-word match it finds — added after testing
+    showed repetition clustering at chunk boundaries even when timestamps were present and valid,
+    since each chunk re-segments the same shared audio independently and there's no guarantee two
+    neighboring chunks agree on exactly where a boundary phrase belongs. A small silence pad is added
+    to the true end of longer recordings, capped to whatever
+    headroom is left in the last 15s window so it can never spill into creating an extra, near-silent
+    final chunk — an earlier version of this padding used a fixed amount and occasionally did exactly
+    that, which demoted the chunk holding the real final words out of "last chunk" status and got its
+    tail trimmed as if it were a middle chunk. When a language switch is detected, it's marked inline
+    as <code>⟨→ Language⟩</code>. None of this catches a switch that happens faster than about 15
+    seconds, including mid-sentence code-switching, or a third language beyond the two candidates
+    picked — those are hard limits of this approach, not settings to tune away. Shorter windows also
+    make Whisper's known repetition/hallucination failure mode — getting stuck looping a phrase,
+    usually on a quiet stretch — somewhat more likely, since a short pause now makes up more of a 15s
+    window than it would have of a 30s one; a repetition penalty and a no-repeat-ngram constraint are
+    applied during generation to push back on it, though this is a mitigation rather than a
+    guarantee. There's no speaker diarization here — that's a separate stage in the fuller
+    blueprint. Performance depends on your device; a laptop with WebGPU support will be noticeably
+    faster than CPU-only WASM, and very long recordings will simply take longer rather than failing.
+    <br><br>
+    <strong>Where entries live:</strong> saved entries — transcripts, your edits, and your notes —
+    are written to this browser's IndexedDB storage for this site. They stay on this device and are
+    never sent anywhere, which also means they are tied to this browser profile: clearing this
+    site's data deletes them, private/incognito windows discard them when closed, and they do not
+    sync across devices or browsers. Raw audio is never stored with an entry; the download button
+    offered immediately after a recording is the only moment to keep the audio itself.
+    <br><br>
+    <strong>AI reflection setup (Library → open an entry):</strong> this feature calls a model server
+    running on your own machine via <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a> —
+    it is never sent to a third-party API. Install Ollama, then pull a model once
+    (<code>ollama pull llama3.3</code> or <code>ollama pull qwen3</code>), and start the server with
+    CORS opened for this page's origin, since Ollama blocks browser requests from other origins by
+    default:
+    <br><br>
+    <code>OLLAMA_ORIGINS=http://localhost:8080 ollama serve</code>
+    <br><br>
+    Adjust the origin to match wherever you're serving this file from (e.g. your GitHub Pages URL).
+    If the entry detail badge reads "not reachable," this is almost always why — check the browser
+    console for the specific CORS or connection error. The endpoint and model are remembered in this
+    browser's local storage so you only need to set them once.
+  </p>
+
+  </div><!-- /viewCapture -->
+
+  <div id="viewLibrary" hidden>
+
+    <div id="libraryList">
+      <div class="panel">
+        <p class="panel-title">Saved entries</p>
+        <input type="search" class="search-input" id="librarySearch"
+               placeholder="Search titles, transcripts, notes, tags, and life eras…">
+        <div id="entryList"></div>
+      </div>
+    </div>
+
+    <div id="entryDetail" hidden>
+      <div class="panel">
+        <div class="actions-row" style="margin:0 0 18px;">
+          <button class="ghost" id="backToLibraryBtn">← All entries</button>
+        </div>
+        <input class="title-input" id="detailTitle" placeholder="Untitled entry" aria-label="Entry title">
+        <div class="meta-line" id="detailMeta"></div>
+
+        <div class="meta-fields-grid">
+          <div class="field">
+            <label for="detailWhere">Where</label>
+            <input type="text" id="detailWhere" placeholder="e.g. Grandma's kitchen">
+          </div>
+          <div class="field">
+            <label for="detailWhen">When</label>
+            <input type="datetime-local" id="detailWhen">
+          </div>
+          <div class="field">
+            <label for="detailEra">Life era</label>
+            <select class="era-select" id="detailEra"></select>
+            <input type="text" id="detailEraCustom" placeholder="Name this era…" hidden style="margin-top:6px;">
+          </div>
+        </div>
+        <label class="privacy-toggle" id="detailPrivacyLabel">
+          <input type="checkbox" id="detailPrivate">
+          <span id="detailPrivacyText">Private — kept on this device only, not marked for any future sharing</span>
+        </label>
+
+        <div style="margin-top:18px;">
+          <p class="panel-title">Tags</p>
+          <div class="tag-row" id="detailTagRow"></div>
+          <div class="tag-row" id="detailSuggestedRow"></div>
+          <div class="tag-input-row">
+            <input type="text" id="detailTagInput" placeholder="Add a custom tag and press Enter…">
+            <button class="ghost" id="detailTagAddBtn">Add tag</button>
+          </div>
+        </div>
+
+        <div style="margin-top:18px;">
+          <p class="panel-title">Transcript
+            <span class="badge-edited" id="editedBadge" hidden>edited</span>
+          </p>
+          <textarea class="transcript-edit" id="detailTranscript" aria-label="Entry transcript"></textarea>
+          <div class="actions-row">
+            <button class="primary" id="saveChangesBtn" disabled>Save changes</button>
+            <button class="ghost" id="restoreOriginalBtn" hidden>Restore original transcript</button>
+            <button class="ghost" id="detailCopyBtn">Copy transcript</button>
+            <button class="danger" id="deleteEntryBtn">Delete entry</button>
+          </div>
+          <p class="hint">
+            Edits overwrite the working transcript but the original, as-transcribed text is kept
+            with the entry — "Restore original transcript" brings it back at any time.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel" id="reflectionPanel">
+        <p class="panel-title">AI reflection <span class="badge-local" id="aiStatusBadge">Ollama · unknown</span></p>
+        <p class="hint" style="margin-top:0;">
+          Sends this transcript to a model running <b>locally via Ollama on this device</b> — over
+          <code>localhost</code>, never to an outside server — and asks for a short reflective response.
+          This is the only feature in LOOB that sends entry data anywhere, even locally. See the footnote
+          below for setup.
+        </p>
+        <div class="controls-grid ai-settings-grid">
+          <div class="field">
+            <label for="aiEndpoint">Ollama endpoint</label>
+            <input type="text" id="aiEndpoint" value="http://localhost:11434">
+          </div>
+          <div class="field">
+            <label for="aiModel">Model</label>
+            <select id="aiModel">
+              <option value="llama3.3">llama3.3</option>
+              <option value="qwen3">qwen3</option>
+              <option value="qwen3:8b">qwen3:8b</option>
+              <option value="custom">Custom…</option>
+            </select>
+          </div>
+          <div class="field" id="aiModelCustomField" hidden>
+            <label for="aiModelCustom">Custom model name</label>
+            <input type="text" id="aiModelCustom" placeholder="e.g. mistral:7b">
+          </div>
+        </div>
+        <div class="actions-row">
+          <button class="primary" id="reflectBtn">Generate reflection</button>
+          <button class="ghost" id="checkOllamaBtn">Check connection</button>
+        </div>
+        <div class="reflection-output" id="reflectionOutput" hidden></div>
+        <p class="hint" id="aiErrorHint" hidden></p>
+
+        <div style="margin-top:20px;">
+          <p class="panel-title">Saved reflections</p>
+          <div id="reflectionList"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-title">Notes</p>
+        <div id="noteList"></div>
+        <textarea class="note-input" id="noteInput"
+                  placeholder="Add a note on this entry…" aria-label="New note"></textarea>
+        <div class="actions-row">
+          <button class="ghost" id="addNoteBtn">Add note</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /viewLibrary -->
+
+</div>
+
+<script type="module">
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1";
+
+env.allowLocalModels = false;
+
+// --- Whisper's supported languages (code: display name) ---
+const WHISPER_LANGUAGES = {
+  auto: "None (single language only)", en: "English", zh: "Chinese", de: "German", es: "Spanish",
+  ru: "Russian", ko: "Korean", fr: "French", ja: "Japanese", pt: "Portuguese",
+  tr: "Turkish", pl: "Polish", ca: "Catalan", nl: "Dutch", ar: "Arabic",
+  sv: "Swedish", it: "Italian", id: "Indonesian", hi: "Hindi", fi: "Finnish",
+  vi: "Vietnamese", he: "Hebrew", uk: "Ukrainian", el: "Greek", ms: "Malay",
+  cs: "Czech", ro: "Romanian", da: "Danish", hu: "Hungarian", ta: "Tamil",
+  no: "Norwegian", th: "Thai", ur: "Urdu", hr: "Croatian", bg: "Bulgarian",
+  lt: "Lithuanian", la: "Latin", mi: "Maori", ml: "Malayalam", cy: "Welsh",
+  sk: "Slovak", te: "Telugu", fa: "Persian", lv: "Latvian", bn: "Bengali",
+  sr: "Serbian", az: "Azerbaijani", sl: "Slovenian", kn: "Kannada", et: "Estonian",
+  mk: "Macedonian", br: "Breton", eu: "Basque", is: "Icelandic", hy: "Armenian",
+  ne: "Nepali", mn: "Mongolian", bs: "Bosnian", kk: "Kazakh", sq: "Albanian",
+  sw: "Swahili", gl: "Galician", mr: "Marathi", pa: "Punjabi", si: "Sinhala",
+  km: "Khmer", sn: "Shona", yo: "Yoruba", so: "Somali", af: "Afrikaans",
+  oc: "Occitan", ka: "Georgian", be: "Belarusian", tg: "Tajik", sd: "Sindhi",
+  gu: "Gujarati", am: "Amharic", yi: "Yiddish", lo: "Lao", uz: "Uzbek",
+  fo: "Faroese", ht: "Haitian Creole", ps: "Pashto", tk: "Turkmen",
+  nn: "Nynorsk", mt: "Maltese", sa: "Sanskrit", lb: "Luxembourgish",
+  my: "Myanmar", bo: "Tibetan", tl: "Tagalog", mg: "Malagasy", as: "Assamese",
+  tt: "Tatar", haw: "Hawaiian", ln: "Lingala", ha: "Hausa", ba: "Bashkir",
+  jw: "Javanese", su: "Sundanese", yue: "Cantonese"
+};
+
+const $ = (id) => document.getElementById(id);
+const statusDot = $("statusDot"), statusText = $("statusText"), progressFill = $("progressFill");
+const loadModelBtn = $("loadModelBtn"), langSelect = $("langSelect"), langSelect2 = $("langSelect2");
+const fileInput = $("fileInput"), recordBtn = $("recordBtn"), recTimer = $("recTimer");
+const transcriptBox = $("transcriptBox"), chunkProgress = $("chunkProgress");
+const wordCount = $("wordCount");
+const debugLog = $("debugLog");
+const copyDebugBtn = $("copyDebugBtn");
+const copyBtn = $("copyBtn"), clearBtn = $("clearBtn");
+
+// entries / library / audio-download elements
+const tabCapture = $("tabCapture"), tabLibrary = $("tabLibrary"), libCount = $("libCount");
+const viewCapture = $("viewCapture"), viewLibrary = $("viewLibrary");
+const saveEntryBtn = $("saveEntryBtn"), downloadAudioBtn = $("downloadAudioBtn"), captureHint = $("captureHint");
+const libraryList = $("libraryList"), entryList = $("entryList"), librarySearch = $("librarySearch");
+const entryDetail = $("entryDetail"), backToLibraryBtn = $("backToLibraryBtn");
+const detailTitle = $("detailTitle"), detailMeta = $("detailMeta"), detailTranscript = $("detailTranscript");
+const saveChangesBtn = $("saveChangesBtn"), restoreOriginalBtn = $("restoreOriginalBtn");
+const detailCopyBtn = $("detailCopyBtn"), deleteEntryBtn = $("deleteEntryBtn"), editedBadge = $("editedBadge");
+const noteList = $("noteList"), noteInput = $("noteInput"), addNoteBtn = $("addNoteBtn");
+
+// text-entry + categorization + consent elements
+const writeEntryInput = $("writeEntryInput"), useWrittenTextBtn = $("useWrittenTextBtn");
+const captureWhere = $("captureWhere"), captureWhen = $("captureWhen"), captureEra = $("captureEra");
+const captureEraCustom = $("captureEraCustom");
+const capturePrivate = $("capturePrivate"), capturePrivacyLabel = $("capturePrivacyLabel"), capturePrivacyText = $("capturePrivacyText");
+const detailWhere = $("detailWhere"), detailWhen = $("detailWhen"), detailEra = $("detailEra");
+const detailEraCustom = $("detailEraCustom");
+const detailPrivate = $("detailPrivate"), detailPrivacyLabel = $("detailPrivacyLabel"), detailPrivacyText = $("detailPrivacyText");
+const detailTagRow = $("detailTagRow"), detailSuggestedRow = $("detailSuggestedRow");
+const aiEndpoint = $("aiEndpoint"), aiModel = $("aiModel");
+const aiModelCustomField = $("aiModelCustomField"), aiModelCustom = $("aiModelCustom");
+const reflectBtn = $("reflectBtn"), checkOllamaBtn = $("checkOllamaBtn");
+const reflectionOutput = $("reflectionOutput"), aiErrorHint = $("aiErrorHint");
+const reflectionList = $("reflectionList"), aiStatusBadge = $("aiStatusBadge");
+const detailTagInput = $("detailTagInput"), detailTagAddBtn = $("detailTagAddBtn");
+
+// State for saving entries and offering the raw-audio download. Raw audio is
+// deliberately kept ONLY in memory, only for the most recent mic recording:
+// entries never store audio, so the download button right after a recording
+// is the one window where the audio exists to be kept.
+let lastRecording = null;        // { pcm: Float32Array, sampleRate: number }
+let lastTranscriptionMeta = null; // { durationS, languages: [codes] }
+let currentSource = null;        // { kind: "recording" } | { kind: "file", name }
+
+function logDebug(msg) {
+  console.log(msg);
+  debugLog.textContent += msg + "\n";
+}
+
+// Single place that writes to the transcript box, so the word/character
+// count next to it can never drift out of sync with what's displayed —
+// useful for confirming growth independent of eyeballing the box itself.
+function updateTranscript(text) {
+  transcriptBox.textContent = text;
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  wordCount.textContent = text ? `${words} words · ${text.length} characters` : "";
+}
+
+for (const [code, name] of Object.entries(WHISPER_LANGUAGES)) {
+  if (code !== "auto") {
+    const opt = document.createElement("option");
+    opt.value = code; opt.textContent = name;
+    langSelect.appendChild(opt);
+  }
+  const opt2 = document.createElement("option");
+  opt2.value = code; opt2.textContent = name;
+  langSelect2.appendChild(opt2);
+}
+langSelect.value = "en";
+langSelect2.value = "auto"; // "None (single language only)"
+
+// ===================== life eras =====================
+const LIFE_ERAS = [
+  "Unspecified", "Childhood", "Adolescence", "Young adulthood",
+  "Early career", "Family & parenting", "Midlife", "Later years",
+  "Present day", "Custom…"
+];
+function populateEraSelect(select) {
+  select.textContent = "";
+  for (const era of LIFE_ERAS) {
+    const opt = document.createElement("option");
+    opt.value = era; opt.textContent = era;
+    select.appendChild(opt);
+  }
+}
+populateEraSelect(captureEra);
+populateEraSelect(detailEra);
+
+function wireEraCustomToggle(select, customInput) {
+  select.addEventListener("change", () => {
+    customInput.hidden = select.value !== "Custom…";
+    if (!customInput.hidden) customInput.focus();
+  });
+}
+wireEraCustomToggle(captureEra, captureEraCustom);
+wireEraCustomToggle(detailEra, detailEraCustom);
+
+// Resolves the era select + its custom text box down to the single string
+// actually stored on the entry.
+function resolveEra(select, customInput) {
+  if (select.value === "Custom…") return (customInput.value || "").trim() || "Custom…";
+  return select.value;
+}
+function applyEraToControls(select, customInput, era) {
+  const known = LIFE_ERAS.includes(era);
+  select.value = known ? era : "Custom…";
+  customInput.hidden = known;
+  customInput.value = known ? "" : era;
+}
+
+function updatePrivacyLabel(checkbox, label, text) {
+  label.classList.toggle("is-private", checkbox.checked);
+  text.textContent = checkbox.checked
+    ? "Private — kept on this device only, not marked for any future sharing"
+    : "Marked shareable — still stored only on this device; nothing is actually sent anywhere by this prototype";
+}
+function wirePrivacyToggle(checkbox, label, text) {
+  checkbox.addEventListener("change", () => updatePrivacyLabel(checkbox, label, text));
+  updatePrivacyLabel(checkbox, label, text);
+}
+wirePrivacyToggle(capturePrivate, capturePrivacyLabel, capturePrivacyText);
+wirePrivacyToggle(detailPrivate, detailPrivacyLabel, detailPrivacyText);
+
+// ===================== datetime-local helpers =====================
+// datetime-local wants "YYYY-MM-DDTHH:mm" in LOCAL time (no timezone
+// suffix) — built from getFullYear/etc rather than toISOString, which is
+// UTC and would silently shift displayed times by the viewer's offset.
+function msToDatetimeLocal(ms) {
+  const d = new Date(ms);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// ===================== rule-based tag suggestions =====================
+// Deliberately simple keyword matching, consistent with Feature Set 3's
+// "no model, no network" Phase 1 scope — this is a lookup, not inference.
+// Each category's keyword list is checked as whole-word matches against the
+// lowercased transcript; a category is suggested if any of its words hit.
+const TAG_RULES = {
+  work: ["job", "career", "boss", "meeting", "deadline", "coworker", "office", "promotion", "interview", "colleague"],
+  family: ["mother", "father", "mom", "dad", "sister", "brother", "family", "parent", "daughter", "son", "grandma", "grandpa", "grandmother", "grandfather"],
+  health: ["doctor", "hospital", "pain", "sick", "illness", "therapy", "diagnosis", "medication", "surgery", "recovery"],
+  relationships: ["partner", "boyfriend", "girlfriend", "husband", "wife", "marriage", "wedding", "breakup", "friend", "friendship"],
+  travel: ["trip", "flight", "vacation", "abroad", "journey", "airport", "traveled", "travelled", "hotel"],
+  gratitude: ["grateful", "thankful", "blessed", "appreciate", "appreciation", "gratitude"],
+  "loss & grief": ["died", "death", "funeral", "loss", "grief", "passed away", "mourning"],
+  achievement: ["proud", "accomplished", "graduated", "graduation", "promotion", "award", "achievement", "success"],
+  conflict: ["argument", "fight", "angry", "conflict", "disagreement", "tension"],
+  milestone: ["birthday", "anniversary", "graduation", "wedding", "born", "milestone"],
+};
+function suggestTags(text) {
+  const lower = (text || "").toLowerCase();
+  const hits = [];
+  for (const [tag, words] of Object.entries(TAG_RULES)) {
+    for (const w of words) {
+      const re = new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+      if (re.test(lower)) { hits.push(tag); break; }
+    }
+  }
+  return hits;
+}
+
+let transcriber = null;
+let audioCtx = null;
+
+function setStatus(kind, text) {
+  statusDot.className = "dot" + (kind ? " " + kind : "");
+  statusText.textContent = text;
+}
+
+loadModelBtn.addEventListener("click", async () => {
+  loadModelBtn.disabled = true;
+  setStatus("loading", "Downloading and initializing Whisper small…");
+  try {
+    const device = navigator.gpu ? "webgpu" : "wasm";
+    transcriber = await pipeline(
+      "automatic-speech-recognition",
+      "onnx-community/whisper-small",
+      {
+        device,
+        dtype: device === "webgpu" ? "fp32" : "q8",
+        progress_callback: (p) => {
+          if (p.status === "progress" && p.total) {
+            const pct = Math.round((p.loaded / p.total) * 100);
+            progressFill.style.width = pct + "%";
+            setStatus("loading", `Fetching ${p.file || "model files"} — ${pct}%`);
+          }
+        }
+      }
+    );
+    progressFill.style.width = "100%";
+    setStatus("ready", `Ready — running on ${device.toUpperCase()}.`);
+    recordBtn.disabled = false;
+  } catch (err) {
+    console.error(err);
+    setStatus(null, "Model failed to load: " + err.message);
+    loadModelBtn.disabled = false;
+  }
+});
+
+// --- audio decoding / resampling to 16kHz mono Float32 ---
+async function ensureAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+// Renders any AudioBuffer down to 16kHz mono Float32 samples. Used for both
+// the "decode an uploaded file" path and the "resample raw mic PCM" path, so
+// there is exactly one place doing this conversion.
+async function renderBufferTo16k(audioBuffer) {
+  const targetLength = Math.ceil(audioBuffer.duration * 16000);
+  const offline = new OfflineAudioContext(1, targetLength, 16000);
+  const src = offline.createBufferSource();
+  src.buffer = audioBuffer;
+  src.connect(offline.destination);
+  src.start(0);
+  const rendered = await offline.startRendering();
+  return rendered.getChannelData(0);
+}
+
+async function decodeFileTo16k(arrayBuffer) {
+  const ctx = await ensureAudioCtx();
+  const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+  return renderBufferTo16k(decoded);
+}
+
+// --- chunk long audio so there is no effective time limit ---
+// Chunks are deliberately short (15s) with modest overlap (3s): Whisper
+// decides on one language token at the start of each generate() call and
+// can't switch language mid-call, so the only way to catch a language
+// switch at all is to re-run detection more often. This does NOT catch a
+// switch that happens mid-sentence or faster than the chunk size — that's
+// a hard limit of how Whisper decodes, not a setting — but it's far more
+// responsive to genuine code-switching than a single 30s window.
+function chunkAudio(float32, sampleRate = 16000, chunkS = 15, strideS = 3) {
+  const chunkSize = chunkS * sampleRate;
+  const strideSize = strideS * sampleRate;
+  const step = chunkSize - strideSize;
+  const chunks = [];
+  if (float32.length <= chunkSize) return [float32];
+  for (let start = 0; start < float32.length; start += step) {
+    const end = Math.min(start + chunkSize, float32.length);
+    chunks.push(float32.slice(start, end));
+    if (end >= float32.length) break;
+  }
+  return chunks;
+}
+
+// Each chunk gets its own independent transcriber() call, so each one
+// re-detects language rather than inheriting a single guess for the whole
+// recording (which is what the pipeline's built-in chunk_length_s does —
+// convenient, but wrong for hybrid-language audio). Segment-level timestamps
+// (not word-level — see earlier note on cross-attention export support)
+// are used to keep only each chunk's trusted middle window, so overlap
+// doesn't get transcribed twice. A chunk that throws is marked inline and
+// skipped rather than aborting everything after it, and the whole recording
+// gets a trailing-silence pad first so the true final sentence doesn't sit
+// on the last chunk's trim boundary.
+async function transcribeFloat32(rawFloat32) {
+  if (!transcriber) { setStatus(null, "Load the model first."); return; }
+  const durationS = rawFloat32.length / 16000;
+  setStatus("busy", `Transcribing ${Math.round(durationS)}s of audio…`);
+  debugLog.textContent = "";
+  saveEntryBtn.disabled = true;
+  saveEntryBtn.textContent = "Save as entry";
+
+  const sampleRate = 16000;
+  const chunkS = 15, strideS = 3;
+  const chunkSizeSamples = chunkS * sampleRate;
+
+  // Figure out the natural chunk boundaries on the untouched recording
+  // first, so we know exactly how much headroom the real last chunk has
+  // before it hits the 15s cap. Padding beyond that headroom would spill
+  // into a brand-new, almost-entirely-silent trailing chunk — which then
+  // gets treated as "the last chunk" instead, demoting the chunk that
+  // actually holds the real final words to a middle chunk whose tail gets
+  // trimmed after all. Capping the pad to the available headroom means
+  // padding can never change how many chunks there are.
+  const rawChunks = chunkAudio(rawFloat32, sampleRate, chunkS, strideS);
+  const lastRawChunkLen = rawChunks[rawChunks.length - 1].length;
+  const headroomSamples = chunkSizeSamples - lastRawChunkLen;
+
+  let float32 = rawFloat32;
+  if (rawFloat32.length > chunkSizeSamples && headroomSamples > 0) {
+    const desiredPadSamples = Math.ceil((strideS + 1) * sampleRate);
+    const padSamples = Math.min(desiredPadSamples, headroomSamples);
+    const padded = new Float32Array(rawFloat32.length + padSamples); // zero-filled
+    padded.set(rawFloat32, 0);
+    float32 = padded;
+  }
+
+  const chunks = chunkAudio(float32, sampleRate, chunkS, strideS);
+  if (chunks.length !== rawChunks.length) {
+    // Should be structurally impossible given the headroom cap above, but
+    // logged rather than assumed — if this ever fires, the cap itself has a
+    // bug and the last chunk's classification can no longer be trusted.
+    console.warn(
+      `Padding changed chunk count (${rawChunks.length} -> ${chunks.length}) — ` +
+      `the last-chunk headroom cap did not behave as expected.`
+    );
+  }
+  const primaryLang = langSelect.value;
+  const secondaryLang = langSelect2.value; // "auto" here means "None" — see relabeled option
+  const hybridMode = secondaryLang !== "auto";
+  let transcriptText = "";
+  let lastDetectedLang = null;
+  let failedChunks = 0;
+  let usedFallback = false;
+
+  // Timestamp-based trimming (below) reduces most cross-chunk overlap, but
+  // each chunk re-segments the same shared audio independently, so there's
+  // no guarantee Whisper's segment boundaries in chunk N line up with the
+  // ones in chunk N+1 for that same overlap region — a phrase can end up
+  // with its timestamp midpoint landing on the "keep" side in both chunks'
+  // own coordinate frames even though the trim logic works correctly in
+  // each one individually. Confirmed in testing: repetition clustered at
+  // chunk boundaries even when segment timestamps were present and valid.
+  // This adds a second, content-based layer on top: after trimming, compare
+  // the tail of what's already been kept against the head of the incoming
+  // chunk's text and drop any real word-for-word overlap found, the same
+  // idea the pipeline's own built-in chunked merge uses (which manual
+  // chunking traded away for the sake of per-chunk language forcing).
+  function findOverlapToSkip(existingWords, newWords, minOverlap = 2, maxSearch = 12) {
+    const searchLen = Math.min(maxSearch, existingWords.length, newWords.length);
+    for (let len = searchLen; len >= minOverlap; len--) {
+      const tail = existingWords.slice(-len).join(" ").toLowerCase();
+      const head = newWords.slice(0, len).join(" ").toLowerCase();
+      if (tail === head) return len;
+    }
+    return 0;
+  }
+  function mergeChunkText(existingText, newText) {
+    const existingWords = existingText.trim() ? existingText.trim().split(/\s+/) : [];
+    const newWords = newText.trim() ? newText.trim().split(/\s+/) : [];
+    const skip = findOverlapToSkip(existingWords, newWords);
+    return { text: existingWords.concat(newWords.slice(skip)).join(" "), skipped: skip };
+  }
+
+  // Every previous attempt at this (top-level options, generate_kwargs,
+  // forced_decoder_ids, then detecting language from an "unconstrained"
+  // sample pass) ran into the same wall: any pass that doesn't explicitly
+  // pin down a language is unreliable in this pipeline and can silently
+  // translate instead of transcribing, with no trustworthy way to tell from
+  // the outside when it has — confirmed directly in testing, where a fully
+  // fluent English "sample" turned out to already be a mistranslated French
+  // sentence. The only combination confirmed reliable, twice, by direct
+  // testing is language + task set together explicitly. So hybrid mode no
+  // longer tries to detect a language at all: it runs each ~15s window
+  // through BOTH candidate languages explicitly, and keeps whichever result
+  // actually looks like its own target language.
+  const SCRIPT_RANGES = [
+    { code: "hi", regex: /[\u0900-\u097F]/ },
+    { code: "ta", regex: /[\u0B80-\u0BFF]/ },
+    { code: "ar", regex: /[\u0600-\u06FF]/ },
+    { code: "zh", regex: /[\u4E00-\u9FFF]/ },
+    { code: "ru", regex: /[\u0400-\u04FF]/ },
+    { code: "ko", regex: /[\uAC00-\uD7AF]/ },
+    { code: "ja", regex: /[\u3040-\u30FF]/ },
+    { code: "th", regex: /[\u0E00-\u0E7F]/ },
+  ];
+  const STOPWORDS = {
+    en: ["the", "is", "and", "of", "to", "in", "a", "that", "it", "for", "on", "with", "this", "was", "as"],
+    fr: ["le", "la", "de", "et", "les", "des", "en", "un", "une", "est", "que", "pour", "dans", "sur", "avec"],
+    tl: ["ang", "ng", "sa", "at", "ay", "mga", "na", "ko", "ka", "mo", "hindi", "para", "kay", "ito", "yan"],
+    es: ["el", "la", "de", "que", "y", "en", "un", "una", "es", "por", "con", "los", "las", "para"],
+    de: ["der", "die", "das", "und", "ist", "zu", "den", "von", "mit", "auf", "für", "nicht", "ein"],
+    it: ["il", "la", "di", "che", "e", "un", "una", "per", "con", "sono", "non", "questo"],
+    pt: ["o", "a", "de", "que", "e", "do", "da", "em", "um", "uma", "para", "com", "não"],
+  };
+  // Scores how well a piece of text matches its OWN claimed language — used
+  // to pick between two explicit-language passes of the same audio, not to
+  // detect a language from scratch. Script languages get a large fixed bonus
+  // if any of their script appears at all, since forcing that language token
+  // biases the decoder's vocabulary toward its native script even when the
+  // audio doesn't match, giving a reasonably clean signal either way.
+  // Stopword languages are scored as a match ratio so two Latin-script
+  // candidates (e.g. English vs French) compare on the same scale.
+  function scoreTextForLanguage(text, code) {
+    const scriptEntry = SCRIPT_RANGES.find((s) => s.code === code);
+    if (scriptEntry) {
+      const matches = text.match(new RegExp(scriptEntry.regex.source, "g")) || [];
+      return matches.length > 0 ? 1000 + matches.length : 0;
+    }
+    const list = STOPWORDS[code];
+    if (!list) return 0; // no scoring data for this language — can't judge, treat neutrally
+    const words = text.toLowerCase().replace(/[.,!?;:"'()]/g, "").split(/\s+/).filter(Boolean);
+    if (words.length === 0) return 0;
+    const matches = words.filter((w) => list.includes(w)).length;
+    return (matches / words.length) * 100;
+  }
+
+  async function transcribeWithLanguage(chunkAudioData, languageCode, genKwargsBase) {
+    return transcriber(chunkAudioData, {
+      return_timestamps: true,
+      language: languageCode,
+      task: "transcribe",
+      generate_kwargs: { ...genKwargsBase, language: languageCode, task: "transcribe" },
+    });
+  }
+
+  for (let i = 0; i < chunks.length; i++) {
+    chunkProgress.textContent = `Processing chunk ${i + 1} of ${chunks.length}…`;
+    // Shared generation settings: no_repeat_ngram_size and repetition_penalty
+    // mitigate Whisper's known repetition/hallucination failure mode (getting
+    // stuck looping a phrase) — more likely with 15s windows, since a short
+    // quiet stretch now makes up more of a chunk than it did at 30s.
+    // A 15s chunk of real speech is rarely more than ~100-150 tokens, so
+    // capping generation well above that still leaves headroom for genuine
+    // speech while bounding the damage if the model gets stuck in a
+    // repetition loop on silence or noise (as seen with the Tamil section
+    // repeating a single word hundreds of times) — repetition_penalty alone
+    // didn't fully prevent that case.
+    const genKwargsBase = { no_repeat_ngram_size: 3, repetition_penalty: 1.3, max_new_tokens: 200 };
+
+    let result;
+    let languageCode = primaryLang;
+    try {
+      if (!hybridMode) {
+        // Single fixed language — no detection needed at all, one pass.
+        result = await transcribeWithLanguage(chunks[i], primaryLang, genKwargsBase);
+      } else {
+        // Hybrid mode: try both candidates explicitly, keep whichever
+        // result actually matches its own target language.
+        const candidates = [primaryLang, secondaryLang];
+        let bestScore = -1;
+        for (const candidateLang of candidates) {
+          let candidateResult;
+          try {
+            candidateResult = await transcribeWithLanguage(chunks[i], candidateLang, genKwargsBase);
+          } catch (err) {
+            logDebug(`Chunk ${i + 1}: candidate "${candidateLang}" failed (${err.message}), skipping it.`);
+            continue;
+          }
+          const score = scoreTextForLanguage(candidateResult.text || "", candidateLang);
+          logDebug(
+            `Chunk ${i + 1}: candidate "${candidateLang}" scored ${score.toFixed(1)} -> ` +
+            `"${(candidateResult.text || "").slice(0, 50)}"`
+          );
+          if (score > bestScore) {
+            bestScore = score;
+            result = candidateResult;
+            languageCode = candidateLang;
+          }
+        }
+        if (!result) throw new Error("both candidate languages failed for this chunk");
+      }
+
+      if (hybridMode && languageCode !== lastDetectedLang) {
+        const langName = WHISPER_LANGUAGES[languageCode] || languageCode;
+        transcriptText = (transcriptText + ` ⟨→ ${langName}⟩`).trim();
+        lastDetectedLang = languageCode;
+      }
+    } catch (err) {
+      console.error(`Chunk ${i + 1} of ${chunks.length} failed:`, err);
+      chunkProgress.textContent =
+        `Chunk ${i + 1} of ${chunks.length} failed (${err.message}) — continuing with the next chunk.`;
+      transcriptText = (transcriptText + ` [chunk ${i + 1} failed: ${err.message}]`).trim();
+      updateTranscript(transcriptText);
+      failedChunks++;
+      continue;
+    }
+
+    const chunkDuration = chunks[i].length / sampleRate;
+    const isFirst = i === 0;
+    const isLast = i === chunks.length - 1;
+    const localStart = isFirst ? 0 : strideS / 2;
+    const localEnd = isLast ? chunkDuration : Math.max(localStart, chunkDuration - strideS / 2);
+
+    const segments = result.chunks;
+    const validTimestampCount = Array.isArray(segments)
+      ? segments.filter((s) => s.timestamp && s.timestamp[0] != null && s.timestamp[1] != null).length
+      : 0;
+    logDebug(
+      `Chunk ${i + 1}: ${Array.isArray(segments) ? segments.length : 0} segment(s) returned, ` +
+      `${validTimestampCount} with usable timestamps (trusted window [${localStart.toFixed(1)}, ${localEnd.toFixed(1)}])`
+    );
+
+    let chunkText;
+    if (validTimestampCount > 0) {
+      // Segments without their own timestamp default to being DROPPED rather
+      // than kept, since keeping them unconditionally would silently turn
+      // the trim into a no-op for exactly the region it exists to trim.
+      const kept = [];
+      for (const seg of segments) {
+        const ts = seg.timestamp || [null, null];
+        const [s, e] = ts;
+        const mid = (s != null && e != null) ? (s + e) / 2 : null;
+        if (mid !== null && mid >= localStart && mid < localEnd) {
+          kept.push(seg.text.trim());
+        }
+      }
+      chunkText = kept.join(" ");
+    } else {
+      // No usable timestamps anywhere in this chunk — trimming by timestamp
+      // is impossible, so fall back to a rough word-proportion trim instead
+      // of keeping the entire chunk (which would duplicate content with
+      // both neighbors at once).
+      usedFallback = true;
+      const words = (result.text || "").trim().split(/\s+/).filter(Boolean);
+      const startFrac = chunkDuration > 0 ? localStart / chunkDuration : 0;
+      const endFrac = chunkDuration > 0 ? localEnd / chunkDuration : 1;
+      const startIdx = Math.floor(words.length * startFrac);
+      const endIdx = Math.ceil(words.length * endFrac);
+      chunkText = words.slice(startIdx, endIdx).join(" ");
+      logDebug(`Chunk ${i + 1}: no usable timestamps — word-proportion trim kept words ${startIdx}-${endIdx} of ${words.length}`);
+    }
+
+    // Content-based dedup layer: catches residual overlap that timestamp
+    // trimming missed because the two chunks segmented the shared audio
+    // differently (see comment above this loop).
+    const merge = mergeChunkText(transcriptText, chunkText);
+    if (merge.skipped > 0) {
+      logDebug(`Chunk ${i + 1}: overlap dedup skipped ${merge.skipped} duplicate word(s) at the boundary.`);
+    }
+    transcriptText = merge.text;
+
+    updateTranscript(transcriptText);
+  }
+
+  if (failedChunks > 0) {
+    chunkProgress.textContent =
+      `Done — ${chunks.length} chunks, but ${failedChunks} failed and are marked inline above.`;
+  } else if (usedFallback) {
+    chunkProgress.textContent =
+      `Done — ${chunks.length} chunks, but at least one had no usable timestamps and used a rougher word-proportion trim instead.`;
+  } else {
+    chunkProgress.textContent = `Done — ${Math.round(durationS)}s of audio across ${chunks.length} chunks.`;
+  }
+  lastTranscriptionMeta = {
+    durationS: Math.round(durationS),
+    languages: hybridMode ? [primaryLang, secondaryLang] : [primaryLang],
+  };
+  saveEntryBtn.disabled = !transcriptText.trim();
+  setStatus("ready", "Ready.");
+}
+
+// ===================== text entry (no transcription step) =====================
+useWrittenTextBtn.addEventListener("click", () => {
+  const text = writeEntryInput.value.trim();
+  if (!text) return;
+  currentSource = { kind: "text" };
+  lastRecording = null;
+  downloadAudioBtn.hidden = true;
+  captureHint.hidden = true;
+  lastTranscriptionMeta = { durationS: null, languages: [] };
+  updateTranscript(text);
+  chunkProgress.textContent = "Loaded from written entry — no transcription performed.";
+  debugLog.textContent = "";
+  saveEntryBtn.disabled = false;
+  setStatus("ready", "Ready.");
+});
+
+fileInput.addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  // The user already has this file on disk, so no download offer is needed —
+  // and any previous mic recording's one-time download window closes here.
+  currentSource = { kind: "file", name: file.name };
+  lastRecording = null;
+  downloadAudioBtn.hidden = true;
+  captureHint.hidden = true;
+  try {
+    setStatus("busy", `Decoding ${file.name}…`);
+    const buf = await file.arrayBuffer();
+    const float32 = await decodeFileTo16k(buf);
+    chunkProgress.textContent = `Decoded ${formatTimer((float32.length / 16000) * 1000)} of audio from ${file.name}.`;
+    await transcribeFloat32(float32);
+  } catch (err) {
+    console.error(err);
+    setStatus(null, "Could not decode that file: " + err.message);
+  }
+});
+
+// --- microphone recording, unbounded length ---
+// Deliberately NOT using MediaRecorder + decodeAudioData here: Chrome (and
+// some other browsers) can write WebM blobs from MediaRecorder without a
+// correct duration in the container header, since the file is being built
+// live rather than finalized up front. decodeAudioData has been observed to
+// silently return a shorter buffer than what was actually recorded in that
+// case — the tail of the recording just disappears before transcription
+// ever sees it. Capturing raw PCM samples directly as they arrive sidesteps
+// that entirely: there is no compressed container to mis-decode, so nothing
+// downstream of the microphone can truncate the recording.
+let recStream = null;
+let recSourceNode = null;
+let recProcessorNode = null;
+let recSilentGain = null;
+let recPcmChunks = [];
+let recording = false;
+let recTimerInterval = null;
+let recStart = 0;
+
+function formatTimer(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const m = String(Math.floor(totalSec / 60)).padStart(2, "0");
+  const s = String(totalSec % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+recordBtn.addEventListener("click", async () => {
+  if (!recording) {
+    try {
+      recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const ctx = await ensureAudioCtx();
+      recPcmChunks = [];
+      // Starting a new recording discards the previous one's audio — its
+      // download window is over.
+      lastRecording = null;
+      downloadAudioBtn.hidden = true;
+      captureHint.hidden = true;
+      recSourceNode = ctx.createMediaStreamSource(recStream);
+      // ScriptProcessorNode is deprecated in favor of AudioWorkletNode, but is
+      // kept here for single-file simplicity and broad support; it still
+      // works reliably for this purpose in current Chrome/Edge/Firefox.
+      recProcessorNode = ctx.createScriptProcessor(4096, 1, 1);
+      recSilentGain = ctx.createGain();
+      recSilentGain.gain.value = 0; // never let mic audio reach the speakers
+      recProcessorNode.onaudioprocess = (e) => {
+        recPcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      };
+      recSourceNode.connect(recProcessorNode);
+      recProcessorNode.connect(recSilentGain);
+      recSilentGain.connect(ctx.destination);
+
+      recording = true;
+      recordBtn.textContent = "■ Stop";
+      recordBtn.classList.add("active");
+      recStart = Date.now();
+      recTimerInterval = setInterval(() => {
+        recTimer.textContent = formatTimer(Date.now() - recStart);
+      }, 500);
+    } catch (err) {
+      console.error(err);
+      setStatus(null, "Microphone access denied or unavailable.");
+    }
+  } else {
+    recording = false;
+    recordBtn.textContent = "● Record";
+    recordBtn.classList.remove("active");
+    clearInterval(recTimerInterval);
+
+    recSourceNode.disconnect();
+    recProcessorNode.disconnect();
+    recSilentGain.disconnect();
+    recStream.getTracks().forEach((t) => t.stop());
+
+    const nativeSampleRate = audioCtx.sampleRate;
+    const totalLength = recPcmChunks.reduce((sum, c) => sum + c.length, 0);
+    const rawPcm = new Float32Array(totalLength);
+    let offset = 0;
+    for (const c of recPcmChunks) { rawPcm.set(c, offset); offset += c.length; }
+    recPcmChunks = [];
+
+    // Keep the untouched, native-sample-rate PCM around (in memory only) so
+    // "Download recording" can hand back exactly what the mic captured —
+    // not the 16kHz downsample the model sees.
+    lastRecording = { pcm: rawPcm, sampleRate: nativeSampleRate };
+    currentSource = { kind: "recording" };
+    downloadAudioBtn.hidden = false;
+    captureHint.hidden = false;
+
+    const recordedSeconds = totalLength / nativeSampleRate;
+    chunkProgress.textContent =
+      `Captured ${formatTimer(recordedSeconds * 1000)} of audio at ${nativeSampleRate}Hz — resampling…`;
+
+    try {
+      const audioBuffer = audioCtx.createBuffer(1, rawPcm.length, nativeSampleRate);
+      audioBuffer.copyToChannel(rawPcm, 0);
+      const float32 = await renderBufferTo16k(audioBuffer);
+      await transcribeFloat32(float32);
+    } catch (err) {
+      console.error(err);
+      setStatus(null, "Could not process recording: " + err.message);
+    }
+  }
+});
+
+copyBtn.addEventListener("click", async () => {
+  const text = transcriptBox.textContent || "";
+  if (!text) return;
+  await navigator.clipboard.writeText(text);
+  copyBtn.textContent = "Copied";
+  setTimeout(() => (copyBtn.textContent = "Copy transcript"), 1200);
+});
+
+copyDebugBtn.addEventListener("click", async () => {
+  const text = debugLog.textContent || "";
+  if (!text) return;
+  await navigator.clipboard.writeText(text);
+  copyDebugBtn.textContent = "Copied";
+  setTimeout(() => (copyDebugBtn.textContent = "Copy debug log"), 1200);
+});
+
+clearBtn.addEventListener("click", () => {
+  updateTranscript("");
+  chunkProgress.textContent = "";
+  debugLog.textContent = "";
+  saveEntryBtn.disabled = true;
+  lastTranscriptionMeta = null;
+});
+
+// ===================== raw-audio WAV download =====================
+// Standard 16-bit PCM WAV container written by hand — no library needed,
+// no lossy re-encode, and nothing touches the network. Encoded at the
+// recording's native sample rate (typically 44.1/48kHz), not the 16kHz
+// downsample the model consumes.
+function encodeWav(float32, sampleRate) {
+  const numSamples = float32.length;
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+  const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  writeStr(0, "RIFF"); view.setUint32(4, 36 + numSamples * 2, true); writeStr(8, "WAVE");
+  writeStr(12, "fmt "); view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);            // PCM
+  view.setUint16(22, 1, true);            // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // byte rate
+  view.setUint16(32, 2, true);            // block align
+  view.setUint16(34, 16, true);           // bits per sample
+  writeStr(36, "data"); view.setUint32(40, numSamples * 2, true);
+  let off = 44;
+  for (let i = 0; i < numSamples; i++, off += 2) {
+    const s = Math.max(-1, Math.min(1, float32[i]));
+    view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+downloadAudioBtn.addEventListener("click", () => {
+  if (!lastRecording) return;
+  const blob = encodeWav(lastRecording.pcm, lastRecording.sampleRate);
+  const url = URL.createObjectURL(blob);
+  const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `loob-recording-${stamp}.wav`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+});
+
+// ===================== entry storage (IndexedDB) =====================
+// Entries live in this browser's IndexedDB for this origin — on-device,
+// no network involvement, consistent with the local-first claim. Each
+// entry is one record: transcript (working copy), originalTranscript
+// (as-transcribed, immutable), notes, and capture metadata.
+const DB_NAME = "loob-entries", DB_VERSION = 1, STORE = "entries";
+let dbPromise = null;
+function openDb() {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        const store = db.createObjectStore(STORE, { keyPath: "id" });
+        store.createIndex("updatedAt", "updatedAt");
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return dbPromise;
+}
+function withStore(mode, fn) {
+  return openDb().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, mode);
+    const req = fn(tx.objectStore(STORE));
+    tx.oncomplete = () => resolve(req && req.result);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  }));
+}
+const dbPut = (entry) => withStore("readwrite", (s) => s.put(entry));
+const dbGetAll = () => withStore("readonly", (s) => s.getAll());
+const dbDelete = (id) => withStore("readwrite", (s) => s.delete(id));
+
+const uid = () => (crypto.randomUUID
+  ? crypto.randomUUID()
+  : Date.now() + "-" + Math.random().toString(36).slice(2));
+
+let cachedEntries = [];
+let openEntryId = null;
+
+async function refreshEntries() {
+  try {
+    cachedEntries = (await dbGetAll()).sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch (err) {
+    console.error("Could not read saved entries:", err);
+    cachedEntries = [];
+  }
+  libCount.textContent = String(cachedEntries.length);
+}
+const getEntry = (id) => cachedEntries.find((e) => e.id === id);
+
+function fmtDate(ms) {
+  return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+function entryMetaLine(e) {
+  const parts = [fmtDate(e.createdAt)];
+  if (e.meta && e.meta.durationS != null) parts.push(`${e.meta.durationS}s`);
+  if (e.meta && e.meta.languages && e.meta.languages.length) {
+    parts.push(e.meta.languages.map((c) => WHISPER_LANGUAGES[c] || c).join(" + "));
+  }
+  if (e.meta && e.meta.source === "file" && e.meta.fileName) parts.push(e.meta.fileName);
+  if (e.where) parts.push(e.where);
+  if (e.lifeEra && e.lifeEra !== "Unspecified") parts.push(e.lifeEra);
+  const w = e.transcript.trim() ? e.transcript.trim().split(/\s+/).length : 0;
+  parts.push(`${w} words`);
+  if (e.notes.length) parts.push(`${e.notes.length} note${e.notes.length === 1 ? "" : "s"}`);
+  if (e.reflections && e.reflections.length) {
+    parts.push(`${e.reflections.length} reflection${e.reflections.length === 1 ? "" : "s"}`);
+  }
+  const tags = e.tags || [];
+  if (tags.length) parts.push(tags.join(", "));
+  parts.push(e.private === false ? "shareable" : "private");
+  return parts.join(" · ");
+}
+
+// ===================== save-as-entry =====================
+saveEntryBtn.addEventListener("click", async () => {
+  const transcript = (transcriptBox.textContent || "").trim();
+  if (!transcript) return;
+  const now = Date.now();
+  const words = transcript.split(/\s+/).filter(Boolean);
+  // "When" defaults to the moment of saving unless the person backdates it;
+  // stored as epoch ms alongside the human-entered datetime-local string.
+  const whenMs = captureWhen.value ? new Date(captureWhen.value).getTime() : now;
+  const entry = {
+    id: uid(),
+    createdAt: now,
+    updatedAt: now,
+    title: words.slice(0, 8).join(" ") + (words.length > 8 ? "…" : ""),
+    transcript,
+    originalTranscript: transcript,
+    notes: [],
+    reflections: [],
+    where: captureWhere.value.trim(),
+    when: whenMs,
+    lifeEra: resolveEra(captureEra, captureEraCustom),
+    private: capturePrivate.checked,
+    // Rule-based suggestions are accepted as the entry's starting tags —
+    // matches Feature Set 3's "rule-based tags" default; the person can
+    // remove any of them or add custom ones afterward in the Library.
+    tags: suggestTags(transcript),
+    meta: {
+      durationS: lastTranscriptionMeta ? lastTranscriptionMeta.durationS : null,
+      languages: lastTranscriptionMeta ? lastTranscriptionMeta.languages : [],
+      source: currentSource ? currentSource.kind : "unknown",
+      fileName: currentSource && currentSource.name ? currentSource.name : null,
+    },
+  };
+  try {
+    await dbPut(entry);
+  } catch (err) {
+    console.error("Saving entry failed:", err);
+    setStatus(null, "Could not save entry: " + err.message);
+    return;
+  }
+  await refreshEntries();
+  saveEntryBtn.disabled = true;
+  saveEntryBtn.textContent = "Saved ✓";
+  // Reset the per-entry capture fields so the next save doesn't silently
+  // inherit the previous entry's where/when/era/privacy.
+  captureWhere.value = "";
+  captureWhen.value = "";
+  captureEra.value = "Unspecified";
+  captureEraCustom.hidden = true;
+  captureEraCustom.value = "";
+  capturePrivate.checked = true;
+  updatePrivacyLabel(capturePrivate, capturePrivacyLabel, capturePrivacyText);
+  setTimeout(() => (saveEntryBtn.textContent = "Save as entry"), 1600);
+});
+
+// ===================== view switching =====================
+function showCapture() {
+  viewCapture.hidden = false;
+  viewLibrary.hidden = true;
+  tabCapture.classList.add("active");
+  tabLibrary.classList.remove("active");
+}
+function showLibrary() {
+  viewCapture.hidden = true;
+  viewLibrary.hidden = false;
+  tabLibrary.classList.add("active");
+  tabCapture.classList.remove("active");
+  closeDetail();
+  renderEntryList();
+}
+tabCapture.addEventListener("click", showCapture);
+tabLibrary.addEventListener("click", showLibrary);
+
+// ===================== library list =====================
+// All library rendering is done via textContent / DOM nodes, never
+// innerHTML, so transcript or note content can't be interpreted as markup.
+function renderEntryList() {
+  const q = (librarySearch.value || "").trim().toLowerCase();
+  entryList.textContent = "";
+  const items = cachedEntries.filter((e) => {
+    if (!q) return true;
+    const hay = (
+      e.title + " " + e.transcript + " " + e.notes.map((n) => n.text).join(" ") + " " +
+      (e.tags || []).join(" ") + " " + (e.lifeEra || "") + " " + (e.where || "")
+    ).toLowerCase();
+    return hay.includes(q);
+  });
+  if (!items.length) {
+    const d = document.createElement("div");
+    d.className = "empty-msg";
+    d.textContent = q
+      ? "No entries match that search."
+      : "No saved entries yet — record or upload something in Capture, then press \u201CSave as entry\u201D.";
+    entryList.appendChild(d);
+    return;
+  }
+  for (const e of items) {
+    const card = document.createElement("div");
+    card.className = "entry-card";
+    const h = document.createElement("h3");
+    h.textContent = e.title || "Untitled entry";
+    if (e.transcript !== e.originalTranscript) {
+      const b = document.createElement("span");
+      b.className = "badge-edited";
+      b.textContent = "edited";
+      h.appendChild(b);
+    }
+    const m = document.createElement("div");
+    m.className = "meta-line";
+    m.textContent = entryMetaLine(e);
+    const p = document.createElement("div");
+    p.className = "preview";
+    p.textContent = e.transcript;
+    card.append(h, m, p);
+    card.addEventListener("click", () => openDetail(e.id));
+    entryList.appendChild(card);
+  }
+}
+librarySearch.addEventListener("input", renderEntryList);
+
+// ===================== entry detail =====================
+let deleteArmed = false;
+let deleteArmTimer = null;
+
+function openDetail(id) {
+  const e = getEntry(id);
+  if (!e) return;
+  openEntryId = id;
+  libraryList.hidden = true;
+  entryDetail.hidden = false;
+  detailTitle.value = e.title || "";
+  detailTranscript.value = e.transcript;
+  detailWhere.value = e.where || "";
+  detailWhen.value = msToDatetimeLocal(e.when || e.createdAt);
+  applyEraToControls(detailEra, detailEraCustom, e.lifeEra || "Unspecified");
+  detailPrivate.checked = e.private !== false; // absent/undefined defaults to private
+  updatePrivacyLabel(detailPrivate, detailPrivacyLabel, detailPrivacyText);
+  saveChangesBtn.disabled = true;
+  saveChangesBtn.textContent = "Save changes";
+  disarmDelete();
+  updateDetailChrome(e);
+  renderNotes(e);
+  renderTags(e);
+  renderReflections(e);
+  reflectionOutput.hidden = true;
+  reflectionOutput.textContent = "";
+  aiErrorHint.hidden = true;
+  setAiBadge(null, "Ollama · unknown");
+}
+function closeDetail() {
+  openEntryId = null;
+  entryDetail.hidden = true;
+  libraryList.hidden = false;
+  disarmDelete();
+}
+backToLibraryBtn.addEventListener("click", () => { closeDetail(); renderEntryList(); });
+
+function updateDetailChrome(e) {
+  let meta = entryMetaLine(e);
+  if (e.updatedAt !== e.createdAt) meta += ` · updated ${fmtDate(e.updatedAt)}`;
+  detailMeta.textContent = meta;
+  editedBadge.hidden = e.transcript === e.originalTranscript;
+  restoreOriginalBtn.hidden = detailTranscript.value === e.originalTranscript;
+}
+function markDirty() {
+  const e = getEntry(openEntryId);
+  if (!e) return;
+  const currentEra = resolveEra(detailEra, detailEraCustom);
+  const dirty =
+    detailTranscript.value !== e.transcript ||
+    detailTitle.value.trim() !== (e.title || "") ||
+    detailWhere.value.trim() !== (e.where || "") ||
+    msToDatetimeLocal(e.when || e.createdAt) !== detailWhen.value ||
+    currentEra !== (e.lifeEra || "Unspecified") ||
+    detailPrivate.checked !== (e.private !== false);
+  saveChangesBtn.disabled = !dirty;
+  restoreOriginalBtn.hidden = detailTranscript.value === e.originalTranscript;
+}
+detailTitle.addEventListener("input", markDirty);
+detailTranscript.addEventListener("input", markDirty);
+detailWhere.addEventListener("input", markDirty);
+detailWhen.addEventListener("input", markDirty);
+detailEra.addEventListener("change", markDirty);
+detailEraCustom.addEventListener("input", markDirty);
+detailPrivate.addEventListener("change", markDirty);
+
+restoreOriginalBtn.addEventListener("click", () => {
+  const e = getEntry(openEntryId);
+  if (!e) return;
+  detailTranscript.value = e.originalTranscript;
+  markDirty();
+});
+
+saveChangesBtn.addEventListener("click", async () => {
+  const e = getEntry(openEntryId);
+  if (!e) return;
+  e.title = detailTitle.value.trim() || "Untitled entry";
+  e.transcript = detailTranscript.value;
+  e.where = detailWhere.value.trim();
+  e.when = detailWhen.value ? new Date(detailWhen.value).getTime() : e.when;
+  e.lifeEra = resolveEra(detailEra, detailEraCustom);
+  e.private = detailPrivate.checked;
+  e.updatedAt = Date.now();
+  try {
+    await dbPut(e);
+  } catch (err) {
+    console.error("Saving changes failed:", err);
+    return;
+  }
+  await refreshEntries();
+  const fresh = getEntry(openEntryId);
+  if (fresh) {
+    detailTitle.value = fresh.title;
+    updateDetailChrome(fresh);
+  }
+  saveChangesBtn.disabled = true;
+  saveChangesBtn.textContent = "Saved ✓";
+  setTimeout(() => (saveChangesBtn.textContent = "Save changes"), 1600);
+});
+
+detailCopyBtn.addEventListener("click", async () => {
+  const text = detailTranscript.value || "";
+  if (!text) return;
+  await navigator.clipboard.writeText(text);
+  detailCopyBtn.textContent = "Copied";
+  setTimeout(() => (detailCopyBtn.textContent = "Copy transcript"), 1200);
+});
+
+// Deleting is deliberately a two-press action rather than a modal — there is
+// no undo once an IndexedDB record is gone, matching the no-server model.
+function disarmDelete() {
+  deleteArmed = false;
+  clearTimeout(deleteArmTimer);
+  deleteEntryBtn.textContent = "Delete entry";
+}
+deleteEntryBtn.addEventListener("click", async () => {
+  if (!deleteArmed) {
+    deleteArmed = true;
+    deleteEntryBtn.textContent = "Press again to delete — no undo";
+    deleteArmTimer = setTimeout(disarmDelete, 3500);
+    return;
+  }
+  disarmDelete();
+  try {
+    await dbDelete(openEntryId);
+  } catch (err) {
+    console.error("Deleting entry failed:", err);
+    return;
+  }
+  await refreshEntries();
+  closeDetail();
+  renderEntryList();
+});
+
+// ===================== notes =====================
+function renderNotes(e) {
+  noteList.textContent = "";
+  if (!e.notes.length) {
+    const d = document.createElement("div");
+    d.className = "empty-msg";
+    d.textContent = "No notes on this entry yet.";
+    noteList.appendChild(d);
+    return;
+  }
+  for (const n of e.notes) {
+    const item = document.createElement("div");
+    item.className = "note-item";
+    const t = document.createElement("div");
+    t.className = "note-text";
+    t.textContent = n.text;
+    const foot = document.createElement("div");
+    foot.className = "note-foot";
+    const meta = document.createElement("span");
+    meta.className = "meta-line";
+    meta.textContent = fmtDate(n.createdAt);
+    const del = document.createElement("button");
+    del.className = "note-del";
+    del.textContent = "Remove";
+    del.addEventListener("click", async () => {
+      const cur = getEntry(openEntryId);
+      if (!cur) return;
+      cur.notes = cur.notes.filter((x) => x.id !== n.id);
+      cur.updatedAt = Date.now();
+      try { await dbPut(cur); } catch (err) { console.error("Removing note failed:", err); return; }
+      await refreshEntries();
+      const fresh = getEntry(openEntryId);
+      if (fresh) { renderNotes(fresh); updateDetailChrome(fresh); }
+    });
+    foot.append(meta, del);
+    item.append(t, foot);
+    noteList.appendChild(item);
+  }
+}
+addNoteBtn.addEventListener("click", async () => {
+  const text = noteInput.value.trim();
+  if (!text) return;
+  const e = getEntry(openEntryId);
+  if (!e) return;
+  e.notes.push({ id: uid(), text, createdAt: Date.now() });
+  e.updatedAt = Date.now();
+  try { await dbPut(e); } catch (err) { console.error("Adding note failed:", err); return; }
+  noteInput.value = "";
+  await refreshEntries();
+  const fresh = getEntry(openEntryId);
+  if (fresh) { renderNotes(fresh); updateDetailChrome(fresh); }
+});
+
+// ===================== tags (categorization) =====================
+// Applied tags render as removable chips; suggested-but-not-applied tags
+// (from the rule engine, re-run against the CURRENT transcript so edits are
+// reflected) render as dashed, clickable chips that add themselves on click.
+// Both lists persist immediately, same pattern as notes, rather than
+// bundling into the title/transcript "Save changes" dirty-check.
+function renderTags(e) {
+  const applied = e.tags || [];
+  detailTagRow.textContent = "";
+  if (!applied.length) {
+    const d = document.createElement("span");
+    d.className = "hint";
+    d.textContent = "No tags applied yet.";
+    detailTagRow.appendChild(d);
+  }
+  for (const tag of applied) {
+    const chip = document.createElement("span");
+    chip.className = "tag-chip";
+    const label = document.createElement("span");
+    label.textContent = tag;
+    const x = document.createElement("span");
+    x.className = "tag-x";
+    x.textContent = "✕";
+    x.title = `Remove "${tag}"`;
+    x.addEventListener("click", () => removeTag(tag));
+    chip.append(label, x);
+    detailTagRow.appendChild(chip);
+  }
+
+  const suggested = suggestTags(e.transcript).filter((t) => !applied.includes(t));
+  detailSuggestedRow.textContent = "";
+  for (const tag of suggested) {
+    const chip = document.createElement("span");
+    chip.className = "tag-chip suggested";
+    chip.textContent = `+ ${tag}`;
+    chip.title = `Add suggested tag "${tag}"`;
+    chip.addEventListener("click", () => addTag(tag));
+    detailSuggestedRow.appendChild(chip);
+  }
+}
+async function addTag(tag) {
+  const clean = tag.trim().toLowerCase();
+  if (!clean) return;
+  const e = getEntry(openEntryId);
+  if (!e) return;
+  e.tags = e.tags || [];
+  if (e.tags.includes(clean)) return;
+  e.tags.push(clean);
+  e.updatedAt = Date.now();
+  try { await dbPut(e); } catch (err) { console.error("Adding tag failed:", err); return; }
+  await refreshEntries();
+  const fresh = getEntry(openEntryId);
+  if (fresh) { renderTags(fresh); updateDetailChrome(fresh); }
+}
+async function removeTag(tag) {
+  const e = getEntry(openEntryId);
+  if (!e) return;
+  e.tags = (e.tags || []).filter((t) => t !== tag);
+  e.updatedAt = Date.now();
+  try { await dbPut(e); } catch (err) { console.error("Removing tag failed:", err); return; }
+  await refreshEntries();
+  const fresh = getEntry(openEntryId);
+  if (fresh) { renderTags(fresh); updateDetailChrome(fresh); }
+}
+detailTagAddBtn.addEventListener("click", () => {
+  addTag(detailTagInput.value);
+  detailTagInput.value = "";
+});
+detailTagInput.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    addTag(detailTagInput.value);
+    detailTagInput.value = "";
+  }
+});
+
+// ===================== AI reflection (local Ollama) =====================
+// The only feature in this app that sends entry data anywhere — and it only
+// ever goes to a model server on this same machine (localhost by default),
+// never to a third-party API. Endpoint/model choice is remembered in this
+// browser's localStorage since it's a device-level setting, not entry data.
+const AI_SETTINGS_KEY = "loobAiSettings";
+const KNOWN_MODELS = ["llama3.3", "qwen3", "qwen3:8b"];
+
+function loadAiSettings() {
+  try {
+    const raw = localStorage.getItem(AI_SETTINGS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (err) { console.warn("Could not read AI settings:", err); }
+  return { endpoint: "http://localhost:11434", model: "llama3.3", customModel: "" };
+}
+function saveAiSettingsToStorage(s) {
+  try { localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(s)); } catch (err) { console.warn("Could not save AI settings:", err); }
+}
+let aiSettings = loadAiSettings();
+
+aiEndpoint.value = aiSettings.endpoint || "http://localhost:11434";
+aiModel.value = KNOWN_MODELS.includes(aiSettings.model) ? aiSettings.model : "custom";
+aiModelCustomField.hidden = aiModel.value !== "custom";
+aiModelCustom.value = aiSettings.customModel || "";
+
+function currentModelName() {
+  return aiModel.value === "custom" ? (aiModelCustom.value.trim() || "llama3.3") : aiModel.value;
+}
+function persistAiSettingsFromUi() {
+  aiSettings = {
+    endpoint: aiEndpoint.value.trim() || "http://localhost:11434",
+    model: aiModel.value,
+    customModel: aiModelCustom.value.trim(),
+  };
+  saveAiSettingsToStorage(aiSettings);
+}
+aiEndpoint.addEventListener("change", persistAiSettingsFromUi);
+aiModel.addEventListener("change", () => {
+  aiModelCustomField.hidden = aiModel.value !== "custom";
+  persistAiSettingsFromUi();
+});
+aiModelCustom.addEventListener("change", persistAiSettingsFromUi);
+
+function setAiBadge(state, text) {
+  aiStatusBadge.classList.remove("good", "bad");
+  if (state) aiStatusBadge.classList.add(state);
+  aiStatusBadge.textContent = text;
+}
+
+async function checkOllamaConnection() {
+  const endpoint = (aiEndpoint.value.trim() || "http://localhost:11434").replace(/\/$/, "");
+  setAiBadge(null, "Ollama · checking…");
+  try {
+    const res = await fetch(`${endpoint}/api/tags`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    setAiBadge("good", "Ollama · connected");
+    return true;
+  } catch (err) {
+    console.warn("Ollama connection check failed:", err);
+    setAiBadge("bad", "Ollama · not reachable");
+    return false;
+  }
+}
+checkOllamaBtn.addEventListener("click", checkOllamaConnection);
+
+// Kept deliberately short and non-clinical: this reflects the entry back to
+// the person, it does not analyze, diagnose, or give advice.
+const REFLECTION_SYSTEM_PROMPT =
+  "You are a gentle, reflective journaling companion. You will be shown a single personal " +
+  "journal entry, transcribed from someone's own spoken or written voice memo. Respond with a " +
+  "short reflection of 3 to 6 sentences: notice what seems to matter most in what they shared, " +
+  "reflect it back in your own words, and where it feels natural, offer one gentle, open-ended " +
+  "question they might sit with. Do not give advice, diagnoses, or clinical language. Do not " +
+  "summarize the entry point by point. Keep the tone warm, unhurried, and never presumptuous " +
+  "about how they feel.";
+
+async function generateReflection() {
+  const e = getEntry(openEntryId);
+  if (!e) return;
+  const transcript = (detailTranscript.value || "").trim();
+  if (!transcript) return;
+
+  persistAiSettingsFromUi();
+  const endpoint = aiSettings.endpoint.replace(/\/$/, "");
+  const model = currentModelName();
+
+  reflectBtn.disabled = true;
+  reflectBtn.textContent = "Generating…";
+  aiErrorHint.hidden = true;
+  reflectionOutput.hidden = false;
+  reflectionOutput.textContent = "";
+  setAiBadge(null, "Ollama · generating…");
+
+  let full = "";
+  try {
+    const res = await fetch(`${endpoint}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        stream: true,
+        messages: [
+          { role: "system", content: REFLECTION_SYSTEM_PROMPT },
+          { role: "user", content: transcript },
+        ],
+      }),
+    });
+    if (!res.ok || !res.body) throw new Error(`Ollama returned HTTP ${res.status}`);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop(); // last (possibly incomplete) line carries over
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let obj;
+        try { obj = JSON.parse(line); } catch { continue; } // ignore stray non-JSON lines
+        if (obj.message && typeof obj.message.content === "string") {
+          full += obj.message.content;
+          reflectionOutput.textContent = full;
+        }
+      }
+    }
+    if (!full.trim()) throw new Error("The model returned an empty response.");
+
+    const fresh1 = getEntry(openEntryId);
+    if (!fresh1) return; // user navigated away mid-generation
+    fresh1.reflections = fresh1.reflections || [];
+    fresh1.reflections.push({ id: uid(), text: full.trim(), model, createdAt: Date.now() });
+    fresh1.updatedAt = Date.now();
+    await dbPut(fresh1);
+    await refreshEntries();
+    const fresh2 = getEntry(openEntryId);
+    if (fresh2) { renderReflections(fresh2); updateDetailChrome(fresh2); }
+    setAiBadge("good", "Ollama · connected");
+  } catch (err) {
+    console.error("Reflection generation failed:", err);
+    aiErrorHint.hidden = false;
+    aiErrorHint.textContent =
+      "Couldn't generate a reflection (" + err.message + "). Make sure `ollama serve` is running, " +
+      "the model is pulled, and OLLAMA_ORIGINS allows this page's origin — see the footnote below " +
+      "the record panel for exact setup steps.";
+    setAiBadge("bad", "Ollama · not reachable");
+  } finally {
+    reflectBtn.disabled = false;
+    reflectBtn.textContent = "Generate reflection";
+  }
+}
+reflectBtn.addEventListener("click", generateReflection);
+
+function renderReflections(e) {
+  reflectionList.textContent = "";
+  const list = e.reflections || [];
+  if (!list.length) {
+    const d = document.createElement("div");
+    d.className = "empty-msg";
+    d.textContent = "No reflections generated yet.";
+    reflectionList.appendChild(d);
+    return;
+  }
+  for (const r of [...list].reverse()) {
+    const item = document.createElement("div");
+    item.className = "reflection-item";
+    const t = document.createElement("div");
+    t.className = "note-text";
+    t.textContent = r.text;
+    const foot = document.createElement("div");
+    foot.className = "note-foot";
+    const meta = document.createElement("span");
+    meta.className = "meta-line";
+    meta.textContent = `${fmtDate(r.createdAt)} · ${r.model}`;
+    const del = document.createElement("button");
+    del.className = "note-del";
+    del.textContent = "Remove";
+    del.addEventListener("click", async () => {
+      const cur = getEntry(openEntryId);
+      if (!cur) return;
+      cur.reflections = (cur.reflections || []).filter((x) => x.id !== r.id);
+      cur.updatedAt = Date.now();
+      try { await dbPut(cur); } catch (err) { console.error("Removing reflection failed:", err); return; }
+      await refreshEntries();
+      const fresh = getEntry(openEntryId);
+      if (fresh) renderReflections(fresh);
+    });
+    foot.append(meta, del);
+    item.append(t, foot);
+    reflectionList.appendChild(item);
+  }
+}
+
+// ===================== init =====================
+refreshEntries();
+</script>
+</body>
+</html>
